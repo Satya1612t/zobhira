@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: job_portal
+    ports:
+      - "5432:5432"
+    volumes:
+      - job_portal_pgdata:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d
+
+volumes:
+  job_portal_pgdata:

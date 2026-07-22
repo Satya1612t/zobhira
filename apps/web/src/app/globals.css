@@ -1,0 +1,263 @@
+:root {
+  /* "Ember" — saturated burnt-orange accent on a warm neutral ground
+     (chosen from the 5-option palette picker). */
+  --bg: #faf8f5;
+  --surface: #ffffff;
+  --surface-hover: #f5f1ea;
+  --ink: #201a14;
+  --ink-muted: #7a6f63;
+  --ink-faint: #a89c8c;
+  --accent: #c1501e;
+  --accent-ink: #ffffff;
+  --accent-soft: #f7e2d3;
+  --line: #eae3d9;
+  --warn: #b23434;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow-card: 0 1px 2px rgba(32, 26, 20, 0.05), 0 1px 1px rgba(32, 26, 20, 0.04);
+  --shadow-raised: 0 8px 24px rgba(32, 26, 20, 0.09), 0 2px 6px rgba(32, 26, 20, 0.05);
+
+  --font-display: var(--font-manrope), "Manrope", system-ui, sans-serif;
+  --font-body: var(--font-manrope), "Manrope", system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* Always light — the original app never had a dark theme, and
+   auto-switching based on system preference (prefers-color-scheme) was
+   surprising rather than helpful, so it's been removed. */
+
+* {
+  box-sizing: border-box;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge/IE */
+}
+
+*::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Chromium Edge */
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  overflow-x: hidden;
+  max-width: 100vw;
+  height: 100vh;
+  overflow-y: hidden; /* the page itself never scrolls — only .main-scroll-area does, so the sidebar/navbar app-shell around it stays genuinely static rather than just sticky-within-a-scrolling-page */
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app-shell {
+  display: flex;
+  height: 100vh;
+}
+
+.main-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  margin-left: 264px; /* offsets the fixed-position sidebar, which no longer takes up flex space itself */
+}
+
+.main-scroll-area {
+  flex: 1;
+  min-height: 0; /* required for a flex child to actually be scrollable instead of growing to fit its content */
+  overflow-y: auto;
+}
+
+@media (max-width: 860px) {
+  .main-content {
+    margin-left: 0; /* sidebar becomes an off-canvas drawer below this breakpoint, see .sidebar's own media query */
+  }
+}
+
+a {
+  color: inherit;
+}
+
+/* "Browse by stream" / "Recent searches" links — colored on hover, and the
+   same coloring stays applied when a stream is the active filter (selected
+   via ?q=...), not just transiently on mouseover. Set here rather than
+   inline because inline styles always beat stylesheet :hover rules
+   regardless of specificity, so hover coloring couldn't work any other way
+   without making this a client component. */
+.stream-link {
+  color: var(--ink-muted);
+  font-weight: 400;
+  transition: color 0.15s ease;
+}
+
+.stream-link:hover {
+  color: var(--accent);
+}
+
+.stream-link-dot {
+  background: var(--line);
+  transition: background 0.15s ease;
+}
+
+.stream-link:hover .stream-link-dot {
+  background: var(--accent);
+}
+
+.stream-link-active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.stream-link-active .stream-link-dot {
+  background: var(--accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton-shimmer {
+    animation: skeleton-shimmer 1.4s ease infinite;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
+
+.sidebar {
+  width: 264px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  padding: 22px 18px 32px;
+  overflow-y: auto;
+  height: 100vh;
+  position: fixed; /* was sticky — genuinely static now, not just "stops scrolling once the page runs out" */
+  top: 0;
+  left: 0;
+  z-index: 15;
+}
+
+.sidebar-toggle {
+  display: none;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 40;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--shadow-raised);
+  }
+
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-toggle {
+    display: inline-flex;
+  }
+
+  .sidebar-backdrop.sidebar-open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(14, 15, 20, 0.4);
+    z-index: 30;
+  }
+
+  .navbar {
+    padding-left: 62px; /* clears the fixed hamburger toggle at top-left */
+  }
+}
+
+.navbar {
+  /* No position/sticky needed — it's a normal flex child at the top of
+     .main-content, which itself never scrolls (only .main-scroll-area
+     inside it does), so it stays in place for free. */
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.detail-grid {
+  display: grid;
+  /* minmax(0, 1fr), not bare 1fr — a bare 1fr track's implicit minimum is
+     its content's min-content size, and a white-space:nowrap element
+     (title truncation) has min-content equal to its full un-truncated
+     width, which can force this whole track (and the page) wider than the
+     viewport. minmax(0, ...) lets it actually shrink to fit. */
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 28px;
+  align-items: start;
+}
+
+.detail-apply-card {
+  position: sticky;
+  top: 28px;
+}
+
+@media (max-width: 720px) {
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-apply-card {
+    position: static;
+  }
+}
+
+.jobs-layout {
+  display: grid;
+  /* Same minmax(0, 1fr) fix as .detail-grid above — this is the track that
+     was actually overflowing (confirmed live: computed to ~1215px instead
+     of shrinking to the available ~976px, dragging the whole page wider). */
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 28px;
+  align-items: start;
+}
+
+.jobs-streams-panel {
+  position: sticky;
+  top: 28px;
+}
+
+@media (max-width: 900px) {
+  .jobs-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .jobs-streams-panel {
+    position: static;
+  }
+}

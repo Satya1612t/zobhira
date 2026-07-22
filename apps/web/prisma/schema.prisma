@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// workplace_type and extraction_method are plain TEXT columns with a
+// CHECK constraint in db/migrations/0001_init.sql (not native Postgres
+// enums), so they're modeled as String here to match the actual column
+// type Prisma's query engine will see.
+model Job {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dedupKey         String    @unique @map("dedup_key")
+  title            String
+  company          String
+  location         String?
+  workplaceType    String    @default("unknown") @map("workplace_type")
+  salaryMin        Decimal?  @map("salary_min")
+  salaryMax        Decimal?  @map("salary_max")
+  salaryCurrency   String?   @map("salary_currency")
+  source           String
+  sourceUrl        String    @map("source_url")
+  description      String?
+  formattedDescription String? @map("formatted_description")
+  highlights       String[]  @default([])
+  tags             String[]  @default([])
+  postedAt         DateTime? @map("posted_at")
+  deadlineAt       DateTime? @map("deadline_at")
+  logoUrl          String?   @map("logo_url")
+  firstSeenAt      DateTime  @default(now()) @map("first_seen_at")
+  lastScrapedAt    DateTime  @default(now()) @map("last_scraped_at")
+  isActive         Boolean   @default(true) @map("is_active")
+  extractionMethod String    @default("deterministic") @map("extraction_method")
+  raw              Json?
+
+  @@index([source])
+  @@index([location])
+  @@index([postedAt])
+  @@index([tags], type: Gin)
+  @@index([isActive, postedAt])
+  @@map("jobs")
+}
+
+// Contest/hackathon listings sourced from public RSS/JSON feeds (Devpost's
+// public API, DEV Community's tag RSS) — a separate table from `jobs`
+// rather than a shared polymorphic one, since the two have little schema
+// overlap (prize vs. salary, deadline-driven vs. posted-driven) and no
+// shared query patterns on the frontend.
+model Contest {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dedupKey         String    @unique @map("dedup_key")
+  title            String
+  platform         String
+  organizer        String?
+  mode             String    @default("unknown")
+  prizeAmount      Decimal?  @map("prize_amount")
+  prizeCurrency    String?   @map("prize_currency")
+  prizeSummary     String?   @map("prize_summary")
+  source           String
+  sourceUrl        String    @map("source_url")
+  description      String?
+  summary          String?
+  highlights       String[]  @default([])
+  tags             String[]  @default([])
+  startsAt         DateTime? @map("starts_at")
+  deadlineAt       DateTime? @map("deadline_at")
+  logoUrl          String?   @map("logo_url")
+  firstSeenAt      DateTime  @default(now()) @map("first_seen_at")
+  lastScrapedAt    DateTime  @default(now()) @map("last_scraped_at")
+  isActive         Boolean   @default(true) @map("is_active")
+  extractionMethod String    @default("deterministic") @map("extraction_method")
+  raw              Json?
+
+  @@index([source])
+  @@index([deadlineAt])
+  @@index([tags], type: Gin)
+  @@index([isActive, deadlineAt])
+  @@map("contests")
+}
+
+// Records every keyword a user searches for, so past searches can be
+// surfaced as quick-access links (see StreamsPanel's "Recent searches")
+// instead of being forgotten after one visit.
+model SearchQuery {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  query           String   @unique
+  searchCount     Int      @default(1) @map("search_count")
+  firstSearchedAt DateTime @default(now()) @map("first_searched_at")
+  lastSearchedAt  DateTime @default(now()) @map("last_searched_at")
+
+  @@index([lastSearchedAt])
+  @@map("search_queries")
+}

@@ -1,0 +1,19 @@
+# Node
+node_modules/
+.next/
+apps/web/.env
+apps/web/.env.local
+
+# Python
+services/scraper/.venv/
+services/scraper/__pycache__/
+services/scraper/**/__pycache__/
+services/scraper/*.egg-info/
+services/scraper/.env
+
+# OS / editor
+.DS_Store
+*.log
+
+# Reference clone (has its own git history, not part of this repo)
+Scrapegraph-ai/
