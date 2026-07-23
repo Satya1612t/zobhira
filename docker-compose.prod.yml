@@ -1,0 +1,204 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: job_portal
+    volumes:
+      - job_portal_pgdata:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      retries: 5
+
+  # Self-hosted LLM proxy (https://github.com/tashfeenahmed/freellmapi) — tried
+  # first in the scraper's LLM fallback path (llm_fallback.py) before the direct
+  # Gemini/Anthropic/OpenAI keys below. Not published to the host — only reachable
+  # by the scraper container via the compose network, same "single-user, no public
+  # exposure" guidance the project's own docs give.
+  freellmapi:
+    image: ghcr.io/tashfeenahmed/freellmapi:latest
+    restart: unless-stopped
+    environment:
+      ENCRYPTION_KEY: ${FREELLMAPI_ENCRYPTION_KEY}
+      PORT: 3001
+    volumes:
+      - freellmapi_data:/app/server/data
+
+  scraper:
+    build: ./services/scraper
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/job_portal
+      FREELLMAPI_BASE_URL: http://freellmapi:3001/v1
+      FREELLMAPI_API_KEY: ${FREELLMAPI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/scheduler/progress').raise_for_status()"]
+      interval: 30s
+      retries: 3
+
+  web:
+    build: ./apps/web
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      scraper:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/job_portal
+      SCRAPER_API_URL: http://scraper:8000
+      # Picked up by nginx-proxy/acme-companion below — not consumed by
+      # Next.js itself, just how those two find and route to this container.
+      VIRTUAL_HOST: ${DOMAIN}
+      VIRTUAL_PORT: 3000
+      LETSENCRYPT_HOST: ${DOMAIN}
+      LETSENCRYPT_EMAIL: ${ACME_EMAIL}
+
+  # Separate app/container from `web` — unauthenticated management UI for
+  # jobs/contests/scheduler/sources, reachable only at its own subdomain
+  # (ADMIN_DOMAIN), not as a path on the public site.
+  admin:
+    build: ./apps/admin
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      scraper:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/job_portal
+      SCRAPER_API_URL: http://scraper:8000
+      VIRTUAL_HOST: ${ADMIN_DOMAIN}
+      VIRTUAL_PORT: 3000
+      LETSENCRYPT_HOST: ${ADMIN_DOMAIN}
+      LETSENCRYPT_EMAIL: ${ACME_EMAIL}
+
+  # Docker-socket proxy, scoped to only what OpenWA's API needs (container
+  # start/stop/inspect for its per-session Chromium sidecars — see its own
+  # repo, https://github.com/rmyndharis/OpenWA) — openwa itself never gets
+  # the raw socket, only this filtered proxy, on a network nothing else can
+  # reach. Same least-privilege pattern the upstream project's own compose
+  # file uses.
+  openwa-docker-proxy:
+    image: tecnativa/docker-socket-proxy:v0.4.2
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      IMAGES: 1
+      VOLUMES: 1
+      INFO: 1
+      PING: 1
+      POST: 1
+      DELETE: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - openwa-internal
+
+  # Self-hosted WhatsApp API + dashboard (https://github.com/rmyndharis/OpenWA).
+  # NOT published through nginx-proxy — same "no public exposure" rule as
+  # freellmapi below, and for a sharper reason here: openwa-docker-proxy
+  # (above) grants it POST/DELETE on the Containers API for its per-session
+  # sidecars, which is equivalent to root on this host. Putting that behind
+  # a public VIRTUAL_HOST with only a static API_MASTER_KEY in front of it
+  # would mean any auth-bypass/RCE in OpenWA's own code pivots straight to
+  # full host compromise. n8n reaches it internally at
+  # http://openwa:2785 (plain compose-network DNS, no VIRTUAL_HOST needed
+  # for that) — you reach the dashboard yourself via SSH port-forward, see
+  # deploy/DEPLOY.md.
+  openwa:
+    image: ghcr.io/rmyndharis/openwa:latest
+    restart: unless-stopped
+    depends_on:
+      - openwa-docker-proxy
+    environment:
+      NODE_ENV: production
+      PORT: 2785
+      DOCKER_HOST: tcp://openwa-docker-proxy:2375
+      API_MASTER_KEY: ${OPENWA_API_MASTER_KEY}
+    volumes:
+      - openwa_data:/app/data
+    networks:
+      - default
+      - openwa-internal
+
+  # Self-hosted n8n (workflow automation) — its own subdomain, basic auth
+  # as the login gate (simplest option for a single-operator instance; n8n's
+  # own user-management system is available later if more people need
+  # accounts). SQLite (n8n's default) rather than Postgres — one operator,
+  # no need for the extra moving part.
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    environment:
+      N8N_HOST: ${N8N_DOMAIN}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://${N8N_DOMAIN}/
+      GENERIC_TIMEZONE: ${N8N_TIMEZONE:-UTC}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
+      VIRTUAL_HOST: ${N8N_DOMAIN}
+      VIRTUAL_PORT: 5678
+      LETSENCRYPT_HOST: ${N8N_DOMAIN}
+      LETSENCRYPT_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  # jwilder/nginx-proxy successor — watches the Docker socket and
+  # auto-generates an Nginx vhost for any container carrying a
+  # VIRTUAL_HOST env var. No hand-written nginx.conf needed.
+  nginx-proxy:
+    image: nginxproxy/nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - certs:/etc/nginx/certs
+      - vhost:/etc/nginx/vhost.d
+      - html:/usr/share/nginx/html
+
+  # Companion to nginx-proxy — auto-issues and auto-renews the Let's
+  # Encrypt cert for any container carrying LETSENCRYPT_HOST/_EMAIL.
+  acme-companion:
+    image: nginxproxy/acme-companion
+    restart: unless-stopped
+    depends_on: [nginx-proxy]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - certs:/etc/nginx/certs
+      - vhost:/etc/nginx/vhost.d
+      - html:/usr/share/nginx/html
+      - acme:/etc/acme.sh
+
+networks:
+  # Explicit default so services that don't declare `networks:` (postgres,
+  # freellmapi, scraper, web, admin, n8n, nginx-proxy, acme-companion) keep
+  # attaching to it exactly as before — only openwa-internal is new.
+  default:
+  openwa-internal:
+    internal: true # no outbound access; only openwa and its docker-proxy sit on this one
+
+volumes:
+  job_portal_pgdata:
+  freellmapi_data:
+  openwa_data:
+  n8n_data:
+  certs:
+  vhost:
+  html:
+  acme:

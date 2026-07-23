@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Manrope, JetBrains_Mono } from "next/font/google";
-import { Sidebar } from "@/components/Sidebar";
-import { Navbar } from "@/components/Navbar";
-import { Footer } from "@/components/Footer";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
-const manrope = Manrope({
+// "HireAuthority" institutional design language: a single Inter family
+// across headings and body (see /DESIGN.md and the fetched mood-board).
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-manrope",
+  weight: ["400", "600", "700", "800"],
+  variable: "--font-inter",
   display: "swap",
 });
 const jetbrainsMono = JetBrains_Mono({
@@ -17,26 +17,27 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
+// metadataBase + a title template so every page (set via its own
+// `export const metadata`) gets a consistent "<Page> | Zobhira" <title>
+// and correctly-resolved absolute URLs for social/share previews.
 export const metadata: Metadata = {
-  title: "Job Portal",
-  description: "Aggregated technical job listings, curated for India",
+  metadataBase: new URL("https://zobhira.com"),
+  title: {
+    default: "Zobhira — Technical jobs & contests, aggregated daily",
+    template: "%s | Zobhira",
+  },
+  description:
+    "Zobhira aggregates technical job listings and hackathons from LinkedIn, Y Combinator, RemoteOK, Talentd, and DEV Community into one searchable board, refreshed around the clock.",
 };
 
+// No app-shell here — the sidebar/navbar/footer chrome lives in
+// app/(main)/layout.tsx so /login (outside that group) can render as a
+// full-bleed page. This root layout only owns <html>/<body>, fonts, and
+// site-wide metadata.
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${manrope.variable} ${jetbrainsMono.variable}`}>
-      <body>
-        <div className="app-shell">
-          <Sidebar />
-          <div className="main-content">
-            <Navbar />
-            <div className="main-scroll-area">
-              {children}
-              <Footer />
-            </div>
-          </div>
-        </div>
-      </body>
+    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }

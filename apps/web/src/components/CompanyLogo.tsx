@@ -1,7 +1,7 @@
-// Warm variants of the Ember accent — a company with no logo gets a
-// tonal initial that stays in-family with the site's palette instead of
-// clashing with it.
-const PALETTE = ["#c1501e", "#a8431f", "#b8752f", "#8f5a28"];
+// Tonal variants of the Industry Blue accent — a company with no logo
+// gets an initial square that stays in-family with the site's palette
+// instead of clashing with it.
+const PALETTE = ["#003366", "#001e40", "#1f477b", "#4a4a4a"];
 
 function colorFor(name: string): string {
   let hash = 0;

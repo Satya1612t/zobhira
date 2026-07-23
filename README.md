@@ -8,10 +8,16 @@ highlighted facts.
 
 ## Structure
 - `apps/web` — Next.js 14 (App Router) job/contest listing and search UI, Prisma + Postgres
+- `apps/admin` — separate Next.js 14 app, its own Prisma client against the same Postgres
+  database; unauthenticated management UI (jobs/contests CRUD, scraper source
+  enable/disable, live scheduler progress + manual triggers). Deployed as its own
+  container on its own subdomain, not a path on the public site — see
+  [Deployment](#deployment).
 - `services/scraper` — Python scraping microservice (Playwright + httpx, ScrapeGraphAI for
   LLM fallback), writes directly to Postgres; exposes a FastAPI app (`api.py`) that also
   runs the background schedulers and on-demand endpoints in-process
 - `db/migrations` — plain SQL migrations, source of truth for the schema
+- `deploy` — production Docker deployment runbook (see [Deployment](#deployment) below)
 
 ## Local dev
 
@@ -46,7 +52,7 @@ highlighted facts.
    ```
    This single process runs **two** independent background schedulers (see
    [Schedulers](#schedulers) below) and exposes their live progress + manual triggers,
-   surfaced in the web app at `/progress`. **Don't also run `scheduler.py` or
+   surfaced in the admin app (see step 5). **Don't also run `scheduler.py` or
    `contest_scheduler.py` standalone alongside this** — each has its own lock that only
    guards within its own process, so a second standalone process risks two sweeps of the
    same family running concurrently.
@@ -60,6 +66,18 @@ highlighted facts.
    npm run dev
    ```
    Visit http://localhost:3000
+
+5. **Run the admin app** (separate process, separate port — jobs/contests
+   management, scraper source toggles, live scheduler progress):
+   ```
+   cd apps/admin
+   npm install
+   copy .env.example .env   # DATABASE_URL + SCRAPER_API_URL (defaults to localhost:8000)
+   npx prisma generate
+   npm run dev
+   ```
+   Visit http://localhost:3002 — unauthenticated, so don't expose this port beyond
+   your own machine in local dev.
 
 ## Schedulers
 
@@ -196,6 +214,14 @@ live-search UI later.
   `source`, `deadlineAt`, `tags` (GIN), and `(isActive, deadlineAt)`.
 - **`SearchQuery`** — tracks every distinct search so `StreamsPanel` can surface recent
   searches as quick-access links; also feeds the scheduler's recent-searches LinkedIn sweep.
+
+## Deployment
+
+`docker-compose.prod.yml` at the repo root containerizes the full stack (Postgres, the
+scraper API, the web app, and a self-hosted FreeLLMAPI instance) behind an Nginx reverse
+proxy with automatic Let's Encrypt TLS — see **[`deploy/DEPLOY.md`](deploy/DEPLOY.md)**
+for the full EC2 setup runbook. The plain `docker-compose.yml` at the root (Postgres
+only) is untouched and still used for local dev as described above.
 
 ## Notes
 - Deterministic parsing (CSS selectors / JSON APIs) is the default scraping path for

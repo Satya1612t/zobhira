@@ -7,7 +7,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from dotenv import load_dotenv
 
-from db.repository import connect, get_recent_searches, reap_expired, reap_stale
+from db.repository import connect, get_enabled_sources, get_recent_searches, reap_expired, reap_stale, record_source_error
 from scripts.run_scrape import run_source
 from taxonomy import STREAM_QUERIES
 
@@ -138,6 +138,12 @@ def _sweep(sources: list[str]) -> None:
     designation_classifier.classify_title, called from run_source) rather
     than by searching for it directly.
 
+    Checks the admin panel's scraper_sources table once at the start (not
+    per-query) and skips any requested source that's been disabled there —
+    applies the same way whether this sweep was cron-triggered or started
+    via a manual POST /scheduler/trigger/{source}, since a paused source
+    should stay paused either way.
+
     Tracks live progress in the module-level `_current` dict, one source
     at a time (step-level: one step per query, not per-posting), and
     writes each source's summary to `_last_runs` as soon as that source
@@ -150,7 +156,17 @@ def _sweep(sources: list[str]) -> None:
         return
 
     try:
+        conn = connect()
+        try:
+            enabled = get_enabled_sources(conn, "job")
+        finally:
+            conn.close()
+
         for source in sources:
+            if source not in enabled:
+                logger.info("Skipping source=%s: disabled in admin panel", source)
+                continue
+
             started_at = datetime.now(timezone.utc)
             queries = [""] if source in NO_SEARCH_SOURCES else STREAM_QUERIES
             total_steps = len(queries)
@@ -170,11 +186,19 @@ def _sweep(sources: list[str]) -> None:
                     )
                     logger.info("source=%s query=%r -> %d postings saved", source, query, count)
                     _current["saved_count"] += count
-                except Exception:
+                except Exception as exc:
                     logger.exception(
                         "Scheduled scrape failed for source=%s query=%r", source, query
                     )
                     errors += 1
+                    try:
+                        error_conn = connect()
+                        try:
+                            record_source_error(error_conn, source, str(exc))
+                        finally:
+                            error_conn.close()
+                    except Exception:
+                        logger.warning("Could not record last_error for source=%s", source)
                 finally:
                     _current["completed_steps"] += 1
             finished_at = datetime.now(timezone.utc)

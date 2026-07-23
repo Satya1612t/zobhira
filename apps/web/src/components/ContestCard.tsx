@@ -17,36 +17,16 @@ export function ContestCard({ contest }: { contest: ContestListItem }) {
   return (
     <Link
       href={`/contest/${contest.id}`}
-      style={{
-        display: "block",
-        padding: "22px 24px",
-        marginBottom: 14,
-        borderRadius: "var(--radius)",
-        background: "var(--surface)",
-        border: "1px solid var(--line)",
-        boxShadow: "var(--shadow-card)",
-        textDecoration: "none",
-        color: "inherit",
-        transition: "box-shadow 0.15s ease, border-color 0.15s ease",
-      }}
+      className="card"
+      style={{ height: "100%", display: "block", textDecoration: "none", color: "inherit" }}
     >
       <div style={{ display: "flex", gap: 16, alignItems: "center", minWidth: 0 }}>
-        <CompanyLogo logoUrl={contest.logoUrl} company={contest.organizer ?? contest.title} size={52} />
+        <CompanyLogo logoUrl={contest.logoUrl} company={contest.organizer ?? contest.title} size={48} />
         <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontFamily: "var(--font-display)",
-              fontWeight: 600,
-              fontSize: 18.5,
-              color: "var(--ink)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
+          <div className="card-title" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {contest.title}
           </div>
-          <div style={{ color: "var(--ink-muted)", marginTop: 4, fontSize: 14.5 }}>
+          <div style={{ color: "var(--ink-muted)", marginTop: 4, fontSize: 13.5 }}>
             {contest.organizer ?? PLATFORM_LABELS[contest.platform] ?? contest.platform}
           </div>
         </div>
@@ -54,58 +34,25 @@ export function ContestCard({ contest }: { contest: ContestListItem }) {
 
       {contest.prizeSummary && (
         <div style={{ marginTop: 12 }}>
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: 12,
-              padding: "3px 10px",
-              borderRadius: 5,
-              background: "var(--accent-soft)",
-              color: "var(--accent)",
-              fontWeight: 700,
-            }}
-          >
-            🏆 {contest.prizeSummary}
-          </span>
+          <span className="tag tag-accent">🏆 {contest.prizeSummary}</span>
         </div>
       )}
 
       {contest.highlights.length > 0 && (
         <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
           {contest.highlights.slice(0, 2).map((highlight) => (
-            <span
-              key={highlight}
-              style={{
-                fontSize: 11.5,
-                padding: "3px 9px",
-                borderRadius: 5,
-                background: "var(--bg)",
-                color: "var(--ink)",
-                border: "1px solid var(--line)",
-                fontWeight: 600,
-              }}
-            >
+            <span key={highlight} className="tag tag-outline">
               ✓ {highlight}
             </span>
           ))}
         </div>
       )}
 
-      <div
-        style={{
-          marginTop: 14,
-          fontFamily: "var(--font-mono)",
-          fontSize: 12.5,
-          color: "var(--ink-faint)",
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 8,
-        }}
-      >
+      <div className="card-meta" style={{ marginTop: 14, flexWrap: "wrap" }}>
         <span>{PLATFORM_LABELS[contest.platform] ?? contest.platform}</span>
         {contest.mode !== "unknown" && <span>· {contest.mode.replace("_", " ")}</span>}
         {deadline && (
-          <span style={{ color: daysLeft !== null && daysLeft <= 7 ? "var(--warn)" : "var(--ink-faint)", fontWeight: 600 }}>
+          <span style={{ color: daysLeft !== null && daysLeft <= 7 ? "var(--warn)" : undefined, fontWeight: 600 }}>
             · {daysLeft !== null && daysLeft >= 0 ? `${daysLeft}d left` : "deadline passed"} (
             {deadline.toLocaleDateString("en-US")})
           </span>

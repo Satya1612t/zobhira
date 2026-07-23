@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Same tables as apps/web/prisma/schema.prisma — this is a second,
+// independently generated Prisma client pointed at the exact same
+// Postgres database, not a shared package (this project isn't an npm
+// workspace). Only the 3 models the admin panel actually touches are
+// defined here; apps/web's SearchQuery model isn't needed.
+model Job {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dedupKey         String    @unique @map("dedup_key")
+  title            String
+  company          String
+  location         String?
+  workplaceType    String    @default("unknown") @map("workplace_type")
+  salaryMin        Decimal?  @map("salary_min")
+  salaryMax        Decimal?  @map("salary_max")
+  salaryCurrency   String?   @map("salary_currency")
+  source           String
+  sourceUrl        String    @map("source_url")
+  description      String?
+  formattedDescription String? @map("formatted_description")
+  highlights       String[]  @default([])
+  tags             String[]  @default([])
+  postedAt         DateTime? @map("posted_at")
+  deadlineAt       DateTime? @map("deadline_at")
+  logoUrl          String?   @map("logo_url")
+  firstSeenAt      DateTime  @default(now()) @map("first_seen_at")
+  lastScrapedAt    DateTime  @default(now()) @map("last_scraped_at")
+  isActive         Boolean   @default(true) @map("is_active")
+  extractionMethod String    @default("deterministic") @map("extraction_method")
+  raw              Json?
+
+  @@index([source])
+  @@index([location])
+  @@index([postedAt])
+  @@index([tags], type: Gin)
+  @@index([isActive, postedAt])
+  @@map("jobs")
+}
+
+model Contest {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dedupKey         String    @unique @map("dedup_key")
+  title            String
+  platform         String
+  organizer        String?
+  mode             String    @default("unknown")
+  prizeAmount      Decimal?  @map("prize_amount")
+  prizeCurrency    String?   @map("prize_currency")
+  prizeSummary     String?   @map("prize_summary")
+  source           String
+  sourceUrl        String    @map("source_url")
+  description      String?
+  summary          String?
+  highlights       String[]  @default([])
+  tags             String[]  @default([])
+  startsAt         DateTime? @map("starts_at")
+  deadlineAt       DateTime? @map("deadline_at")
+  logoUrl          String?   @map("logo_url")
+  firstSeenAt      DateTime  @default(now()) @map("first_seen_at")
+  lastScrapedAt    DateTime  @default(now()) @map("last_scraped_at")
+  isActive         Boolean   @default(true) @map("is_active")
+  extractionMethod String    @default("deterministic") @map("extraction_method")
+  raw              Json?
+
+  @@index([source])
+  @@index([deadlineAt])
+  @@index([tags], type: Gin)
+  @@index([isActive, deadlineAt])
+  @@map("contests")
+}
+
+model ScraperSource {
+  name        String    @id
+  family      String
+  enabled     Boolean   @default(true)
+  lastError   String?   @map("last_error")
+  lastErrorAt DateTime? @map("last_error_at")
+
+  @@map("scraper_sources")
+}

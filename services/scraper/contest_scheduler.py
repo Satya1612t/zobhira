@@ -6,7 +6,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from dotenv import load_dotenv
 
-from db.repository import connect, reap_expired_contests, reap_stale_contests
+from db.repository import connect, get_enabled_sources, reap_expired_contests, reap_stale_contests, record_source_error
 from scripts.run_contest_scrape import CONTEST_SCRAPERS, run_contest_source
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -68,7 +68,17 @@ def _contest_sweep(sources: list[str]) -> None:
         return
 
     try:
+        conn = connect()
+        try:
+            enabled = get_enabled_sources(conn, "contest")
+        finally:
+            conn.close()
+
         for source in sources:
+            if source not in enabled:
+                logger.info("Skipping contest source=%s: disabled in admin panel", source)
+                continue
+
             started_at = datetime.now(timezone.utc)
             _contest_current = {
                 "source": source, "tier": CONTEST_SOURCE_TIER[source],
@@ -81,9 +91,17 @@ def _contest_sweep(sources: list[str]) -> None:
                 count = run_contest_source(source, mark_stale=False)
                 logger.info("contest source=%s -> %d postings saved", source, count)
                 _contest_current["saved_count"] += count
-            except Exception:
+            except Exception as exc:
                 logger.exception("Contest scrape failed for source=%s", source)
                 errors += 1
+                try:
+                    error_conn = connect()
+                    try:
+                        record_source_error(error_conn, source, str(exc))
+                    finally:
+                        error_conn.close()
+                except Exception:
+                    logger.warning("Could not record last_error for contest source=%s", source)
             finally:
                 _contest_current["completed_steps"] += 1
             finished_at = datetime.now(timezone.utc)

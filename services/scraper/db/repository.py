@@ -337,3 +337,32 @@ def update_job_formatting(
             {"formatted_description": formatted_description, "highlights": highlights, "id": job_id},
         )
     conn.commit()
+
+
+def get_enabled_sources(conn: psycopg.Connection, family: str) -> set[str]:
+    """Reads the same `scraper_sources` table the admin panel writes to
+    (apps/web/src/app/api/admin/sources/[name]/route.ts) — same Postgres
+    database, no API call back to the web app needed, same
+    cross-language-shared-table pattern as get_recent_searches above.
+    Every real source has a seeded row (db/migrations/0011); a source with
+    no row at all simply won't appear in the returned set (callers should
+    add a migration row for any new source, not rely on a missing-row
+    default)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT name FROM scraper_sources WHERE family = %(family)s AND enabled = true",
+            {"family": family},
+        )
+        return {row["name"] for row in cur.fetchall()}
+
+
+def record_source_error(conn: psycopg.Connection, source: str, error: str) -> None:
+    """Best-effort — overwrites with the most recent failure, not an
+    accumulating log. Commits itself since this is called from inside a
+    per-source except block, not a shared batch transaction."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE scraper_sources SET last_error = %(error)s, last_error_at = now() WHERE name = %(source)s",
+            {"error": error[:2000], "source": source},
+        )
+    conn.commit()

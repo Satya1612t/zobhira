@@ -3,6 +3,8 @@ node_modules/
 .next/
 apps/web/.env
 apps/web/.env.local
+apps/admin/.env
+apps/admin/.env.local
 
 # Python
 services/scraper/.venv/
@@ -14,6 +16,15 @@ services/scraper/.env
 # OS / editor
 .DS_Store
 *.log
+
+# SSH / deploy keys — never belong in the repo
+yes
+yes.pub
+*.pem
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
 
 # Reference clone (has its own git history, not part of this repo)
 Scrapegraph-ai/

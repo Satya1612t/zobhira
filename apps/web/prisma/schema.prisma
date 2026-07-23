@@ -94,3 +94,19 @@ model SearchQuery {
   @@index([lastSearchedAt])
   @@map("search_queries")
 }
+
+// Scraper source enable/disable + last-error visibility for the admin
+// panel — a cross-language-shared config table, same pattern as
+// SearchQuery: the Python scheduler reads/writes this same Postgres table
+// via psycopg (see services/scraper/db/repository.py), Next.js reads/
+// writes it via Prisma directly. Job/Contest rows themselves are untouched
+// by this — this is purely "should this source run at all right now."
+model ScraperSource {
+  name        String    @id
+  family      String
+  enabled     Boolean   @default(true)
+  lastError   String?   @map("last_error")
+  lastErrorAt DateTime? @map("last_error_at")
+
+  @@map("scraper_sources")
+}

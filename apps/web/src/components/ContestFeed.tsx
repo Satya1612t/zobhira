@@ -92,7 +92,7 @@ export function ContestFeed({
   }, []);
 
   return (
-    <div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
       {contests.map((contest) => (
         <ContestCard key={contest.id} contest={contest} />
       ))}

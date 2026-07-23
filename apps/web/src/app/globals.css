@@ -1,30 +1,225 @@
 :root {
-  /* "Ember" — saturated burnt-orange accent on a warm neutral ground
-     (chosen from the 5-option palette picker). */
-  --bg: #faf8f5;
-  --surface: #ffffff;
-  --surface-hover: #f5f1ea;
-  --ink: #201a14;
-  --ink-muted: #7a6f63;
-  --ink-faint: #a89c8c;
-  --accent: #c1501e;
-  --accent-ink: #ffffff;
-  --accent-soft: #f7e2d3;
-  --line: #eae3d9;
-  --warn: #b23434;
-  --radius: 12px;
-  --radius-sm: 8px;
-  --shadow-card: 0 1px 2px rgba(32, 26, 20, 0.05), 0 1px 1px rgba(32, 26, 20, 0.04);
-  --shadow-raised: 0 8px 24px rgba(32, 26, 20, 0.09), 0 2px 6px rgba(32, 26, 20, 0.05);
+  /* "HireAuthority" institutional design language (see /DESIGN.md) —
+     corporate blue/white palette, Inter type, soft rounded cards. Adapted
+     from a Claude Design mood-board (Tailwind/Material-3 token set),
+     translated into this app's existing CSS-custom-property system rather
+     than adopting Tailwind. */
+  --color-bg: #f7f9fc;
+  --color-surface: #ffffff;
+  --color-surface-muted: #eceef1;
+  --color-text: #191c1e;
+  --color-text-muted: #4a4a4a;
+  --color-accent: #003366; /* "Industry Blue" */
+  --color-accent-dark: #001e40;
+  --color-accent-soft: #d5e3ff;
+  --color-divider: #e0e3e6;
+  --color-error: #ba1a1a;
 
-  --font-display: var(--font-manrope), "Manrope", system-ui, sans-serif;
-  --font-body: var(--font-manrope), "Manrope", system-ui, sans-serif;
+  --font-heading: var(--font-inter), "Inter", system-ui, sans-serif;
+  --font-heading-weight: 700;
+  --font-body: var(--font-inter), "Inter", system-ui, sans-serif;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  --shadow-sm: 0px 2px 4px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0px 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0px 12px 32px rgba(0, 0, 0, 0.12);
+
+  /* Legacy token names — aliased so pages/components not explicitly
+     rebuilt for this pass (About/Contact/Privacy/Live, Footer) still
+     render with the new palette without being touched. */
+  --bg: var(--color-bg);
+  --surface: var(--color-surface);
+  --surface-hover: var(--color-surface-muted);
+  --ink: var(--color-text);
+  --ink-muted: var(--color-text-muted);
+  --ink-faint: color-mix(in srgb, var(--color-text-muted) 75%, transparent);
+  --accent: var(--color-accent);
+  --accent-ink: #ffffff;
+  --accent-soft: var(--color-accent-soft);
+  --line: var(--color-divider);
+  --warn: var(--color-error);
+  --radius: var(--radius-lg);
+  --radius-sm: var(--radius-md);
+  --shadow-card: var(--shadow-sm);
+  --shadow-raised: var(--shadow-lg);
+
+  --font-display: var(--font-heading);
   --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, monospace;
 }
 
-/* Always light — the original app never had a dark theme, and
-   auto-switching based on system preference (prefers-color-scheme) was
-   surprising rather than helpful, so it's been removed. */
+body {
+  font-family: var(--font-body);
+}
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+}
+
+/* — buttons — */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--color-text);
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 12px 20px;
+  border-radius: var(--radius-md);
+  transition: transform 0.1s ease, opacity 0.15s ease, background 0.15s ease;
+}
+.btn svg { display: block; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--color-accent); color: #ffffff; }
+.btn-primary:hover { opacity: 0.92; }
+.btn-secondary { border-color: var(--color-divider); background: var(--color-surface); color: var(--color-accent); }
+.btn-secondary:hover { background: var(--color-surface-muted); }
+.btn-ghost { color: var(--color-text-muted); }
+.btn-ghost:hover { color: var(--color-accent); }
+.btn-icon { width: 40px; height: 40px; padding: 0; }
+.btn-block { width: 100%; margin-top: 8px; }
+
+/* — forms — */
+.field > label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 5px;
+  color: var(--color-text);
+}
+.input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--color-text);
+  caret-color: var(--color-accent);
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+}
+.input:hover { border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-divider)); }
+.input:focus-visible { border-color: var(--color-accent); outline: 2px solid var(--color-accent); outline-offset: 0; }
+.seg {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+}
+.seg-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.seg-opt + .seg-opt { border-left: 1px solid var(--color-divider); }
+.seg-opt input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.seg-opt:has(input:checked) { background: var(--color-accent); color: #ffffff; }
+.seg-opt:not(:has(input:checked)):hover { background: var(--color-surface-muted); }
+
+/* — cards — */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.card-kicker { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent); font-weight: 700; }
+.card-title { font-family: var(--font-heading); font-weight: 700; font-size: 17px; line-height: 1.25; }
+.card-body { margin: 0; font-size: 13px; opacity: 0.8; flex: 1; }
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.elev-sm { box-shadow: var(--shadow-sm); }
+.elev-md { box-shadow: var(--shadow-md); }
+.elev-lg { box-shadow: var(--shadow-lg); }
+
+/* — tags/pills — */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 4px 11px;
+  border-radius: var(--radius-full);
+}
+.tag-accent { background: var(--color-accent-soft); color: var(--color-accent); }
+.tag-neutral { background: var(--color-surface-muted); color: var(--color-text-muted); }
+.tag-outline { border: 1px solid var(--color-divider); color: var(--color-text-muted); background: var(--color-surface); }
+
+/* — dialog — */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(25, 28, 30, 0.5);
+  z-index: 100;
+}
+.dialog {
+  width: min(440px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 28px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+.dialog-title { font-family: var(--font-heading); font-weight: 700; font-size: 20px; }
+.dialog-body { font-size: 14px; color: var(--color-text-muted); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+
+/* — tables — */
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th {
+  text-align: left;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  padding: 10px;
+  border-bottom: 1px solid var(--color-divider);
+}
+.table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--color-divider);
+}
+.table tbody tr:hover { background: var(--color-surface-muted); }
 
 * {
   box-sizing: border-box;
@@ -50,10 +245,104 @@ body {
   overflow-y: hidden; /* the page itself never scrolls — only .main-scroll-area does, so the sidebar/navbar app-shell around it stays genuinely static rather than just sticky-within-a-scrolling-page */
 }
 
+/* The login page's illustration + feature-card column is desktop-only —
+   the mobile mockup shows brand + form only. */
+@media (max-width: 900px) {
+  .login-illustration-col {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .login-feature-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* The sign-in/create-account card remounts (key={tab}) each time the tab
+   query param changes, which retriggers this animation — a 3D flip around
+   the Y axis, direction chosen by destination tab so switching feels like
+   turning the card over rather than just fading. */
+.auth-flip-card {
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  animation-duration: 0.55s;
+  animation-timing-function: cubic-bezier(0.4, 0.1, 0.2, 1);
+  animation-fill-mode: both;
+}
+.auth-flip-from-right {
+  animation-name: authFlipFromRight;
+}
+.auth-flip-from-left {
+  animation-name: authFlipFromLeft;
+}
+@keyframes authFlipFromRight {
+  from { transform: rotateY(-90deg); opacity: 0; }
+  to { transform: rotateY(0deg); opacity: 1; }
+}
+@keyframes authFlipFromLeft {
+  from { transform: rotateY(90deg); opacity: 0; }
+  to { transform: rotateY(0deg); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-flip-card {
+    animation: none;
+  }
+}
+
+/* "Notched outline" field/button treatment — scoped to .notched-form so it
+   only affects the login form, not .field/.input/.btn-primary/.btn-secondary
+   used elsewhere in the app (home, profile, ApplyModal, Navbar, etc). The
+   label sits cut into the border line itself (a small surface-colored patch
+   behind it breaks the border) rather than floating above the field. */
+.notched-form .field {
+  position: relative;
+  margin-top: 9px;
+}
+.notched-form .field > label {
+  position: absolute;
+  top: -8px;
+  left: 10px;
+  margin-bottom: 0;
+  background: var(--color-surface);
+  padding: 0 6px;
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+  z-index: 1;
+  transition: color 0.15s ease;
+}
+.notched-form .field:focus-within > label {
+  color: var(--color-accent);
+}
+.notched-form .input {
+  background: transparent;
+  border: 1.5px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+}
+.notched-form .input:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-divider));
+}
+.notched-form .input:focus-visible {
+  border-color: var(--color-accent);
+  border-width: 2px;
+  outline: none;
+}
+.notched-form .btn-primary {
+  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface));
+  color: var(--color-accent);
+}
+.notched-form .btn-primary:hover {
+  background: color-mix(in srgb, var(--color-accent) 22%, var(--color-surface));
+  opacity: 1;
+}
+.notched-form .btn-secondary {
+  background: transparent;
+  border: 1.5px solid var(--color-divider);
+}
+
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -124,7 +413,6 @@ a {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 4px;
 }
 
 @media (prefers-reduced-motion: no-preference) {

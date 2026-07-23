@@ -22,7 +22,7 @@ export function Footer() {
       }}
     >
       <span style={{ fontSize: 12.5, color: "var(--ink-faint)" }}>
-        © {new Date().getFullYear()} Job Portal
+        © {new Date().getFullYear()} Zobhira
       </span>
       <nav style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
         {LINKS.map((link) => (
