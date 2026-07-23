@@ -1,5 +1,11 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // node:20-alpine's Alpine base ships OpenSSL 3.x only (no libssl.so.1.1),
+  // but Prisma's default "native" musl engine target was built against
+  // OpenSSL 1.1 — without this explicit target, the built image fails at
+  // runtime with "Error loading shared library libssl.so.1.1: No such
+  // file or directory". "native" is kept too for local dev on other OSes.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
