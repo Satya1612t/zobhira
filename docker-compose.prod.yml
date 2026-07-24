@@ -16,15 +16,19 @@ services:
 
   # Self-hosted LLM proxy (https://github.com/tashfeenahmed/freellmapi) — tried
   # first in the scraper's LLM fallback path (llm_fallback.py) before the direct
-  # Gemini/Anthropic/OpenAI keys below. Not published to the host — only reachable
-  # by the scraper container via the compose network, same "single-user, no public
-  # exposure" guidance the project's own docs give.
+  # Gemini/Anthropic/OpenAI keys below. Not published to the public internet —
+  # bound to 127.0.0.1 only, so it's reachable via an SSH tunnel (for the
+  # one-time dashboard setup, see deploy/DEPLOY.md) but not from outside the
+  # VPS, same "single-user, no public exposure" guidance the project's own
+  # docs give.
   freellmapi:
     image: ghcr.io/tashfeenahmed/freellmapi:latest
     restart: unless-stopped
     environment:
       ENCRYPTION_KEY: ${FREELLMAPI_ENCRYPTION_KEY}
       PORT: 3001
+    ports:
+      - "127.0.0.1:3001:3001"
     volumes:
       - freellmapi_data:/app/server/data
 
@@ -143,6 +147,8 @@ services:
       PORT: 2785
       DOCKER_HOST: tcp://openwa-docker-proxy:2375
       API_MASTER_KEY: ${OPENWA_API_MASTER_KEY}
+    ports:
+      - "127.0.0.1:2785:2785"
     volumes:
       - openwa_data:/app/data
     networks:
