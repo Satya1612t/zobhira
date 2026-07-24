@@ -47,3 +47,38 @@ export function extractTechnologies(description: string | null, limit = 20): str
   }
   return found;
 }
+
+// Ordered by specificity — a numeric range/floor ("2-4 years", "5+ years")
+// is checked before the vaguer entry-level phrases, since a description
+// could technically contain both ("entry level, 0-1 years").
+const EXPERIENCE_MATCHERS: { regex: RegExp; label: (m: RegExpMatchArray) => string }[] = [
+  { regex: /(\d+)\s*-\s*(\d+)\s*\+?\s*years?/i, label: (m) => `${m[1]}-${m[2]} years` },
+  { regex: /(\d+)\s*\+\s*years?/i, label: (m) => `${m[1]}+ years` },
+  { regex: /(\d+)\s*years?(?:\s*of)?\s*experience/i, label: (m) => `${m[1]}+ years` },
+  { regex: /entry[\s-]?level/i, label: () => "Entry level" },
+  { regex: /\bfresher(?:s)?\b/i, label: () => "Fresher" },
+  { regex: /no\s+(?:prior\s+)?experience\s+(?:required|necessary)/i, label: () => "No experience required" },
+];
+
+// Best-effort, deterministic — same reliability class as extractTechnologies.
+// Returns null (never a guess) when the description doesn't literally state
+// an experience requirement; callers may fall back to an LLM for those cases.
+export function extractExperience(description: string | null): string | null {
+  if (!description) return null;
+  for (const { regex, label } of EXPERIENCE_MATCHERS) {
+    const match = description.match(regex);
+    if (match) return label(match);
+  }
+  return null;
+}
+
+const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+
+// Returns the first email address literally present in the description, or
+// null. Deterministic only — no LLM fallback, since inventing an email would
+// be actively wrong rather than merely missing.
+export function extractEmail(description: string | null): string | null {
+  if (!description) return null;
+  const match = description.match(EMAIL_REGEX);
+  return match ? match[0] : null;
+}

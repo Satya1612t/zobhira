@@ -116,3 +116,26 @@ model ScraperSource {
 
   @@map("scraper_sources")
 }
+
+// Outbound-post tracking, shared with the n8n dispatch workflows. One row
+// per (contentType, contentId, platform); a row exists only once a send has
+// been confirmed-or-attempted. "Pending for platform X" = active job/contest
+// with no telegram row yet, or a row whose postedAt is null (failed send,
+// retried next poll). Generalizes to whatsapp/instagram/youtube with no
+// schema change — same cross-language-shared-table pattern as ScraperSource.
+// No FK to jobs/contests: contentId is a bare UUID matching either table's id,
+// so this one flat table covers both content types.
+model DispatchLog {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  contentType String    @map("content_type")
+  contentId   String    @map("content_id") @db.Uuid
+  platform    String
+  postedAt    DateTime? @map("posted_at")
+  attempts    Int       @default(0)
+  lastError   String?   @map("last_error")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([contentType, contentId, platform])
+  @@index([platform, contentType, contentId])
+  @@map("dispatch_log")
+}

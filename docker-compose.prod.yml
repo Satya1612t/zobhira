@@ -61,6 +61,16 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/job_portal
       SCRAPER_API_URL: http://scraper:8000
+      # Shared secret the n8n dispatch workflows send as X-Dispatch-Key to the
+      # /api/dispatch/* endpoints (service-to-service, over the compose
+      # network at http://web:3000 — never exposed publicly). See
+      # requireDispatchKey in apps/web/src/lib/dispatchAuth.ts.
+      DISPATCH_API_KEY: ${DISPATCH_API_KEY}
+      # Same freellmapi already used by scraper — web needs it too now, for
+      # the skills/experience LLM-fallback in /api/dispatch/pending (see
+      # apps/web/src/lib/dispatchLlm.ts).
+      FREELLMAPI_BASE_URL: http://freellmapi:3001/v1
+      FREELLMAPI_API_KEY: ${FREELLMAPI_API_KEY}
       # Picked up by nginx-proxy/acme-companion below — not consumed by
       # Next.js itself, just how those two find and route to this container.
       VIRTUAL_HOST: ${DOMAIN}

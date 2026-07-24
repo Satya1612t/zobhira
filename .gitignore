@@ -17,6 +17,13 @@ services/scraper/.env
 .DS_Store
 *.log
 
+# Personal MCP server config — contains real API keys (n8n, etc.), not
+# meant to be shared/committed.
+.mcp.json
+
+# n8n workflow exports — kept local only, not versioned in git.
+n8n/
+
 # SSH / deploy keys — never belong in the repo
 yes
 yes.pub
