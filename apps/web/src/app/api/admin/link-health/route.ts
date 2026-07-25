@@ -17,9 +17,22 @@ const TIMEOUT_MS = 8000;
 // the next batch to check again.
 const CONFIRMED_DEAD_STATUSES = new Set([404, 410]);
 
-type LinkStatus = "alive" | "dead" | "inconclusive";
+// Default dry-run switch — set LINK_HEALTH_DRY_RUN=true in the environment
+// to run every check without actually deactivating anything, logging what
+// *would* have been deactivated instead. Meant for a short trial period
+// after standing this up (or after touching the dead-link heuristics
+// below): landedOnRoot in particular is a guess, not a certainty — some
+// sites (LinkedIn especially) redirect a still-live job to the homepage
+// when the request looks logged-out/blocked, not just when the job is
+// actually gone. Watch dry-run output for a few days, spot-check a few of
+// the flagged URLs by hand, and only then turn this off. A `?dryRun=`
+// query param always overrides the env var for one-off manual testing.
+const DRY_RUN_DEFAULT = process.env.LINK_HEALTH_DRY_RUN === "true";
 
-async function checkLink(url: string): Promise<LinkStatus> {
+type LinkStatus = "alive" | "dead" | "inconclusive";
+type DeadReason = "404" | "410" | "landedOnRoot";
+
+async function checkLink(url: string): Promise<{ status: LinkStatus; reason?: DeadReason }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -39,8 +52,10 @@ async function checkLink(url: string): Promise<LinkStatus> {
       },
     });
 
-    if (CONFIRMED_DEAD_STATUSES.has(res.status)) return "dead";
-    if (!res.ok) return "inconclusive";
+    if (CONFIRMED_DEAD_STATUSES.has(res.status)) {
+      return { status: "dead", reason: res.status === 404 ? "404" : "410" };
+    }
+    if (!res.ok) return { status: "inconclusive" };
 
     // A redirect that lands on the bare site root (when the original URL
     // wasn't already the root) usually means the specific posting was
@@ -50,11 +65,11 @@ async function checkLink(url: string): Promise<LinkStatus> {
     const originalPath = new URL(url).pathname;
     const landedOnRoot = finalPath === "/" || finalPath === "";
     const wasNotAlreadyRoot = originalPath !== "/" && originalPath !== "";
-    if (landedOnRoot && wasNotAlreadyRoot) return "dead";
+    if (landedOnRoot && wasNotAlreadyRoot) return { status: "dead", reason: "landedOnRoot" };
 
-    return "alive";
+    return { status: "alive" };
   } catch {
-    return "inconclusive";
+    return { status: "inconclusive" };
   } finally {
     clearTimeout(timeout);
   }
@@ -64,6 +79,9 @@ export async function POST(request: NextRequest) {
   const denied = requireDispatchKey(request);
   if (denied) return denied;
 
+  const dryRunParam = request.nextUrl.searchParams.get("dryRun");
+  const dryRun = dryRunParam !== null ? dryRunParam === "true" : DRY_RUN_DEFAULT;
+
   const jobs = await prisma.job.findMany({
     where: { isActive: true },
     orderBy: [{ linkCheckedAt: { sort: "asc", nulls: "first" } }],
@@ -72,25 +90,46 @@ export async function POST(request: NextRequest) {
   });
 
   const results = await Promise.all(
-    jobs.map(async (job) => ({ job, status: await checkLink(job.sourceUrl) }))
+    jobs.map(async (job) => ({ job, ...(await checkLink(job.sourceUrl)) }))
   );
 
-  const deadIds = results.filter((r) => r.status === "dead").map((r) => r.job.id);
+  const dead = results.filter((r) => r.status === "dead");
+  const deadIds = dead.map((r) => r.job.id);
   const checkedAt = new Date();
 
   await prisma.$transaction([
+    // linkCheckedAt always advances, dry run or not — otherwise the same
+    // batch (oldest-checked-first) would just get re-checked every call
+    // instead of cycling through the rest of the active jobs.
     prisma.job.updateMany({
       where: { id: { in: results.map((r) => r.job.id) } },
       data: { linkCheckedAt: checkedAt },
     }),
-    ...(deadIds.length
+    ...(!dryRun && deadIds.length
       ? [prisma.job.updateMany({ where: { id: { in: deadIds } }, data: { isActive: false } })]
       : []),
   ]);
 
+  if (dryRun && dead.length) {
+    console.warn(
+      `[link-health dry-run] would deactivate ${dead.length} job(s):`,
+      dead.map((r) => `${r.job.id} (${r.reason}): ${r.job.sourceUrl}`).join("; ")
+    );
+  }
+
   return NextResponse.json({
+    dryRun,
     checked: results.length,
-    deactivated: deadIds.length,
+    deactivated: dryRun ? 0 : deadIds.length,
     inconclusive: results.filter((r) => r.status === "inconclusive").length,
+    ...(dryRun
+      ? {
+          wouldDeactivate: dead.map((r) => ({
+            id: r.job.id,
+            sourceUrl: r.job.sourceUrl,
+            reason: r.reason,
+          })),
+        }
+      : {}),
   });
 }

@@ -71,6 +71,10 @@ services:
       # apps/web/src/lib/dispatchLlm.ts).
       FREELLMAPI_BASE_URL: http://freellmapi:3001/v1
       FREELLMAPI_API_KEY: ${FREELLMAPI_API_KEY}
+      # /api/admin/link-health dry-run switch — see .env.production.example
+      # for why this should start true and only flip to false after a few
+      # days of watching its wouldDeactivate output.
+      LINK_HEALTH_DRY_RUN: ${LINK_HEALTH_DRY_RUN:-true}
       # Picked up by nginx-proxy/acme-companion below — not consumed by
       # Next.js itself, just how those two find and route to this container.
       VIRTUAL_HOST: ${DOMAIN}
