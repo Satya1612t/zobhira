@@ -9,6 +9,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from dotenv import load_dotenv
 
 from db.repository import connect, get_enabled_sources, get_recent_searches, reap_expired, reap_stale, record_source_error
+from scrapers.base import RateLimitedError
 from scripts.run_scrape import run_source
 from taxonomy import STREAM_QUERIES
 from utils.browser import get_browser
@@ -212,6 +213,7 @@ def _sweep(sources: list[str]) -> None:
             with browser_ctx as sweep_browser:
                 for query in queries:
                     _current["current_query"] = query or "(all listings, no query filter)"
+                    rate_limited = False
                     try:
                         count = run_source(
                             source, query=query, location=LOCATION,
@@ -221,6 +223,28 @@ def _sweep(sources: list[str]) -> None:
                         )
                         logger.info("source=%s query=%r -> %d postings saved", source, query, count)
                         _current["saved_count"] += count
+                    except RateLimitedError as exc:
+                        # A 429 means the source just told us to back off —
+                        # ploughing through the remaining queries in this
+                        # sweep would just keep hammering it, turning a soft
+                        # rate limit into a hard ban. Abort the rest of this
+                        # source's queries for this cycle entirely, rather
+                        # than treating it like any other per-query failure
+                        # that just moves on to the next query.
+                        logger.warning(
+                            "source=%s rate limited (429) on query=%r — skipping remaining queries this cycle",
+                            source, query,
+                        )
+                        errors += 1
+                        rate_limited = True
+                        try:
+                            error_conn = connect()
+                            try:
+                                record_source_error(error_conn, source, str(exc))
+                            finally:
+                                error_conn.close()
+                        except Exception:
+                            logger.warning("Could not record last_error for source=%s", source)
                     except Exception as exc:
                         logger.exception(
                             "Scheduled scrape failed for source=%s query=%r", source, query
@@ -236,6 +260,8 @@ def _sweep(sources: list[str]) -> None:
                             logger.warning("Could not record last_error for source=%s", source)
                     finally:
                         _current["completed_steps"] += 1
+                    if rate_limited:
+                        break
             finished_at = datetime.now(timezone.utc)
             _last_runs[source] = {
                 "started_at": started_at.isoformat(), "finished_at": finished_at.isoformat(),

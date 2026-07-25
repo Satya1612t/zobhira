@@ -50,6 +50,20 @@ model Job {
   // Prisma, purely read. Demotes thin/suspicious postings and rewards
   // complete ones (salary/logo/deadline/tags/description length) without
   // ever deleting anything.
+  //
+  // DRIFT WARNING: Prisma has no way to express a Postgres GENERATED
+  // ALWAYS ... STORED column, so this is declared as a plain Int here —
+  // that's a deliberate lie to keep Prisma read-only on this field, NOT
+  // the real column definition. NEVER run `prisma db push` or
+  // `prisma migrate dev` against this database: either would try to
+  // reconcile this into an actual plain integer column and silently drop
+  // the generated expression, permanently breaking the score. Only
+  // hand-written SQL migrations (db/migrations/) may touch this column.
+  // The @@index below also doesn't match the real index's direction
+  // (Postgres: DESC, via db/migrations/0014) — Prisma's schema syntax has
+  // no way to declare index sort order, so this is ASC-by-default and
+  // exists only so `prisma db pull` doesn't flag it as unmanaged; it does
+  // not describe the real index and must not be trusted for query planning.
   qualityScore     Int       @default(0) @map("quality_score")
   // Last time /api/admin/link-health verified sourceUrl was reachable —
   // NULL means never checked. See db/migrations/0015_add_job_link_checked_at.sql.

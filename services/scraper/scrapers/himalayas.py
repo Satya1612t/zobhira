@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 
-from scrapers.base import BaseJobScraper, JobPosting
+from scrapers.base import BaseJobScraper, JobPosting, RateLimitedError
 from utils.http import make_client
 from utils.rate_limit import throttle
 from utils.text import strip_html
@@ -25,7 +25,7 @@ MAX_PAGES_PER_QUERY = 3
 # both 403'd. That rules out a sustained IP ban (which would keep failing)
 # and points to a transient WAF/bot-score challenge on an individual
 # request. Unlike 429 (a real, explicit rate-limit signal — abort the whole
-# run, see RateLimitedError below), a 403 is worth a few quick retries with
+# run, see scrapers.base.RateLimitedError), a 403 is worth a few quick retries with
 # backoff before giving up: the evidence says a retry is very likely to
 # succeed. Gives up on just that one query (not the whole sweep) if all
 # retries are also 403 — a page 2/3 fetch mid-query isn't retried this way,
@@ -38,13 +38,6 @@ BACKOFF_BASE_SECONDS = 2.0
 # a 723-result query returned 18, not 20) — so `len(jobs) < limit` is NOT a
 # safe "last page" signal. `offset + len(jobs) >= totalCount` (both present
 # in every response) is the only reliable stop condition.
-
-
-class RateLimitedError(Exception):
-    """Raised when Himalayas returns HTTP 429. Retrying a rate limit
-    immediately only makes it worse, so this aborts the whole source run
-    for this cycle rather than retrying — scheduler.py's per-query except
-    block catches it, logs it, and records it as this source's last_error."""
 
 
 def _parse_timestamp(value) -> datetime | None:
@@ -79,18 +72,27 @@ def _is_india_eligible(location_restrictions: list | None) -> bool:
     carry real per-country restrictions that a generic remote check can't
     see. Empty list means no restriction (worldwide-open, live-confirmed:
     a country=IN search still returns jobs with an empty
-    locationRestrictions). "Never store a job your users can't take."""
+    locationRestrictions). "Never store a job your users can't take."
+    Exact match (not substring) — a substring check would also match
+    "British Indian Ocean Territory", which isn't India."""
     if not location_restrictions:
         return True
-    return any("india" in str(c).lower() for c in location_restrictions)
+    return any(str(c).strip().lower() == "india" for c in location_restrictions)
 
 
 def _format_location(location_restrictions: list | None) -> str:
+    """Himalayas' own published docs describe locationRestrictions as
+    `[{alpha2, name, slug}]` objects; live responses (verified 2026-07-25)
+    are actually plain strings. Coercing with str(c) keeps this from
+    crashing (and dropping the whole query) if that ever reverts to the
+    documented object shape — matches the same defensive str(c) coercion
+    _is_india_eligible already does."""
     if not location_restrictions:
         return "Worldwide"
-    if len(location_restrictions) <= 5:
-        return ", ".join(location_restrictions)
-    return ", ".join(location_restrictions[:5]) + f" +{len(location_restrictions) - 5} more"
+    names = [str(c) for c in location_restrictions]
+    if len(names) <= 5:
+        return ", ".join(names)
+    return ", ".join(names[:5]) + f" +{len(names) - 5} more"
 
 
 class HimalayasScraper(BaseJobScraper):
@@ -176,6 +178,21 @@ class HimalayasScraper(BaseJobScraper):
                     if not title or not company:
                         continue
 
+                    # applicationLink has equaled guid on every posting seen
+                    # live so far, but that's not a guaranteed API contract
+                    # — guid isn't documented as a URL at all, and trusting
+                    # it as a fallback apply link risks silently storing a
+                    # broken (or non-URL) apply destination. Skip rather
+                    # than guess: same "never store a job your users can't
+                    # take" principle as _is_india_eligible above.
+                    application_link = job.get("applicationLink")
+                    if not application_link:
+                        logger.warning(
+                            "Himalayas posting %r (guid=%r) has no applicationLink — skipping",
+                            title, guid,
+                        )
+                        continue
+
                     description = strip_html(job.get("description")) or strip_html(job.get("excerpt"))
                     seniority = job.get("seniority")
                     seniority_text = ", ".join(seniority) if isinstance(seniority, list) else seniority
@@ -192,7 +209,7 @@ class HimalayasScraper(BaseJobScraper):
                             salary_max=job.get("maxSalary"),
                             salary_currency=job.get("currency"),
                             source=self.source_name,
-                            source_url=job.get("applicationLink") or guid,
+                            source_url=application_link,
                             description=description,
                             tags=tags,
                             posted_at=_parse_timestamp(job.get("pubDate")),

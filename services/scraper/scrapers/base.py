@@ -9,6 +9,16 @@ class SelectorNotFoundError(Exception):
     LLM-driven extraction path."""
 
 
+class RateLimitedError(Exception):
+    """Raised by a scraper when the source's API/site returns an explicit
+    rate-limit signal (e.g. HTTP 429). Retrying immediately only makes it
+    worse, so scheduler.py's per-query sweep loop catches this specifically
+    and aborts the rest of that source's queries for this cycle, instead of
+    ploughing through the remaining ones against a service that just said
+    to back off — the exact behavior that turns a soft rate limit into a
+    hard ban."""
+
+
 @dataclass
 class JobPosting:
     title: str
