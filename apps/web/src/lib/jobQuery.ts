@@ -30,6 +30,19 @@ export const JOB_SELECT = {
 
 export type JobListItem = Prisma.JobGetPayload<{ select: typeof JOB_SELECT }>;
 
+// Default listing order: best-quality first (see the Postgres-computed
+// qualityScore column, db/migrations/0014_add_job_quality_score.sql), then
+// newest, then a stable id tiebreak. `sort=oldest` is an explicit user
+// choice to see the chronologically oldest first — qualityScore doesn't
+// override that, since the whole point of picking "oldest" is chronology,
+// not quality.
+export function jobOrderBy(sort?: string): Prisma.JobOrderByWithRelationInput[] {
+  if (sort === "oldest") {
+    return [{ postedAt: "asc" }, { id: "desc" }];
+  }
+  return [{ qualityScore: "desc" }, { postedAt: "desc" }, { id: "desc" }];
+}
+
 export type SearchParams = {
   q?: string;
   location?: string;
@@ -37,6 +50,13 @@ export type SearchParams = {
   postedWithin?: string;
   sort?: string;
   experienceLevel?: string;
+  company?: string;
+  tags?: string;
+  employmentType?: string;
+  source?: string | string[];
+  hasSalary?: string;
+  salaryMin?: string;
+  hideIncomplete?: string;
 };
 
 // Sentinel value for the explicit worldwide opt-out — kept distinct from ""
@@ -44,9 +64,28 @@ export type SearchParams = {
 // (defaults to India) apart from "user explicitly wants everywhere".
 export const ANY_LOCATION = "__any__";
 
-function postedWithinCutoff(postedWithin: string): Date | null {
-  const days = { "24h": 1, week: 7, month: 30 }[postedWithin];
-  if (!days) return null;
+// Same sentinel pattern as ANY_LOCATION — the freshness filter now defaults
+// to "past week" when untouched (see postedWithinCutoff), so an explicit
+// value is needed to distinguish "user hasn't touched this" from "user
+// deliberately wants every posting regardless of age".
+export const ALL_TIME = "__all_time__";
+
+// Canonical employment-type tag values — normalized by the scraper itself
+// (services/scraper/scrapers/{linkedin,talentd}.py's
+// `.replace("-", "").replace(" ", "").capitalize()` on the source's raw
+// "full-time"/"part-time"/etc.) before ever reaching the DB, so an exact
+// (case-sensitive) Prisma `tags: { has: ... }` match against these is
+// reliable — unlike the free-text skills filter below, which can't assume
+// its input matches stored casing.
+const EMPLOYMENT_TYPE_TAGS = ["Fulltime", "Parttime", "Contract", "Internship", "Intern"];
+
+// Defaults to "past week" per the review's own reasoning ("this week" beats
+// "all" as a default) — ALL_TIME is the explicit opt-out. Unlike the other
+// filters here, this one has a non-empty default, so "not present at all"
+// and "present with an empty value" are treated the same (both -> week).
+function postedWithinCutoff(postedWithin?: string): Date | null {
+  if (postedWithin === ALL_TIME) return null;
+  const days = { "24h": 1, week: 7, month: 30 }[postedWithin || "week"] ?? 7;
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 }
 
@@ -138,9 +177,13 @@ export async function suggestCorrection(q: string): Promise<string | null> {
 // "Experience level" isn't a real column — it's inferred from free-text
 // description via regex, so matching happens as a raw-SQL lookup that
 // resolves to a set of job IDs, then folds into the normal typed Prisma
-// where clause as `id: { in: [...] }`. Every stored job is guaranteed a
-// non-null description (see scripts/run_scrape.py's mandatory-field rule),
-// so there's no need to special-case a NULL description here.
+// where clause as `id: { in: [...] }`. Descriptions can be NULL now (a
+// "stub" posting whose detail-page enrichment hasn't landed yet — see
+// scripts/run_scrape.py's MANDATORY_FIELDS comment) — `~*`/`!~*`/
+// regexp_match against a NULL description all evaluate to NULL, which a
+// SQL WHERE clause treats as "no match", so a stub simply doesn't match any
+// experience-level filter rather than erroring or false-matching. Correct
+// behavior: we genuinely don't know its experience level yet.
 const EXPERIENCE_MIN_YEARS: Record<string, number> = { "1+": 1, "2+": 2, "3+": 3, "5+": 5 };
 
 // Postgres regex syntax for the experience-level filter dropdown. The
@@ -172,17 +215,58 @@ async function experienceMatchingIds(level: string): Promise<string[] | null> {
   return rows.map((r) => r.id);
 }
 
+// Skills/tech-stack search — free text, comma-separated (e.g. "python,
+// react"), matched against ANY of a job's tags (OR, not AND — "python,
+// react" means either, not both). Unlike employmentType's exact match
+// against known-canonical values, arbitrary user-typed skill text can't
+// assume it matches stored tag casing (tags are mixed-case — "Machine
+// learning" vs "React"), so this goes through a raw ILIKE-per-tag lookup
+// (same "resolve to job IDs first" pattern as experienceMatchingIds) rather
+// than Prisma's case-sensitive-only array `hasSome`.
+async function skillsMatchingIds(rawTags: string): Promise<string[]> {
+  const patterns = rawTags
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map((t) => `%${t}%`);
+  if (patterns.length === 0) return [];
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT DISTINCT j.id FROM jobs j, unnest(j.tags) AS t
+    WHERE j.is_active = true AND t ILIKE ANY(${patterns})
+  `;
+  return rows.map((r) => r.id);
+}
+
 // Shared where-clause builder for the two job-browsing pages (Jobs / Live
 // Opening) — `extra` lets a caller (like /live) bolt on an additional hard
 // constraint (e.g. postedAt >= 48h ago) without duplicating the rest.
 export async function buildJobsWhere(
-  { q, location, workplaceType, postedWithin, experienceLevel }: SearchParams,
+  {
+    q, location, workplaceType, postedWithin, experienceLevel,
+    company, tags, employmentType, source, hasSalary, salaryMin, hideIncomplete,
+  }: SearchParams,
   extra?: Prisma.JobWhereInput
 ): Promise<{ where: Prisma.JobWhereInput; isDefaultIndiaScope: boolean }> {
-  const postedAfter = postedWithin ? postedWithinCutoff(postedWithin) : null;
+  const postedAfter = postedWithinCutoff(postedWithin);
   const isAnyLocation = location === ANY_LOCATION;
   const isDefaultIndiaScope = !location && !isAnyLocation;
-  const experienceIds = experienceLevel ? await experienceMatchingIds(experienceLevel) : null;
+
+  // Both resolve to `id: { in: [...] }` — collected into one array and
+  // merged via `AND` (rather than naively spread, which would let the
+  // second silently clobber the first under the same `id` key) so
+  // experienceLevel and skills can be filtered on at the same time.
+  const [experienceIds, skillIds] = await Promise.all([
+    experienceLevel ? experienceMatchingIds(experienceLevel) : Promise.resolve(null),
+    tags ? skillsMatchingIds(tags) : Promise.resolve(null),
+  ]);
+  const idFilters: Prisma.JobWhereInput[] = [];
+  if (experienceIds) idFilters.push({ id: { in: experienceIds } });
+  if (skillIds) idFilters.push({ id: { in: skillIds } });
+
+  const sourceList = Array.isArray(source) ? source : source ? [source] : [];
+  const minSalary = salaryMin ? Number(salaryMin) : null;
+  const validEmploymentType =
+    employmentType && EMPLOYMENT_TYPE_TAGS.includes(employmentType) ? employmentType : null;
 
   const where: Prisma.JobWhereInput = {
     isActive: true,
@@ -194,7 +278,18 @@ export async function buildJobsWhere(
         : {}),
     ...(workplaceType ? { workplaceType } : {}),
     ...(postedAfter ? { postedAt: { gte: postedAfter } } : {}),
-    ...(experienceIds ? { id: { in: experienceIds } } : {}),
+    ...(company ? { company: { contains: company, mode: "insensitive" as const } } : {}),
+    ...(validEmploymentType ? { tags: { has: validEmploymentType } } : {}),
+    ...(sourceList.length ? { source: { in: sourceList } } : {}),
+    // An explicit min implies "must be disclosed" too — no need for both
+    // conditions when a min is set, `gte` alone already excludes NULLs.
+    ...(minSalary !== null && !Number.isNaN(minSalary)
+      ? { salaryMin: { gte: minSalary } }
+      : hasSalary === "true"
+        ? { salaryMin: { not: null } }
+        : {}),
+    ...(hideIncomplete === "true" ? { description: { not: null } } : {}),
+    ...(idFilters.length === 1 ? idFilters[0] : idFilters.length > 1 ? { AND: idFilters } : {}),
     ...(extra ?? {}),
   };
 

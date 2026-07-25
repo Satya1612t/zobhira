@@ -22,7 +22,15 @@ export function Footer() {
       }}
     >
       <span style={{ fontSize: 12.5, color: "var(--ink-faint)" }}>
-        © {new Date().getFullYear()} Zobhira
+        © {new Date().getFullYear()} Zobhira · Remote listings include jobs from{" "}
+        <a
+          href="https://himalayas.app"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: "var(--ink-faint)" }}
+        >
+          Himalayas
+        </a>
       </span>
       <nav style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
         {LINKS.map((link) => (

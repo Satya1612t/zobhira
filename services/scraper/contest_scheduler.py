@@ -25,7 +25,7 @@ CONTEST_RUN_AT = time(hour=3, minute=0)
 # its public JSON list endpoint has no free-text description field at all,
 # so it could never pass the strict mandatory-field rule in
 # run_contest_scrape.py (title/description/start date/end date, same
-# spirit as jobs' 5-field rule). Runs daily — too low a volume (one
+# spirit as jobs' 4-field rule). Runs daily — too low a volume (one
 # bounded feed fetch, not a 15-query sweep) to need tiering by cadence.
 CONTEST_TIER_SOURCES: dict[str, list[str]] = {"daily": ["dev_community"]}
 CONTEST_SOURCE_TIER: dict[str, str] = {

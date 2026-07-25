@@ -7,6 +7,7 @@ import {
   suggestCorrection,
   recordSearch,
   getRecentSearches,
+  jobOrderBy,
   JOB_SELECT,
   type SearchParams,
 } from "@/lib/jobQuery";
@@ -18,12 +19,12 @@ export default async function JobsPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { q, location, workplaceType, postedWithin, sort, experienceLevel } = searchParams;
+  const {
+    q, location, workplaceType, postedWithin, sort, experienceLevel,
+    company, tags, employmentType, source, hasSalary, salaryMin, hideIncomplete,
+  } = searchParams;
   const { where, isDefaultIndiaScope } = await buildJobsWhere(searchParams);
-  const orderBy = [
-    { postedAt: sort === "oldest" ? ("asc" as const) : ("desc" as const) },
-    { id: "desc" as const },
-  ];
+  const orderBy = jobOrderBy(sort);
 
   const [, filteredJobs, recentSearches] = await Promise.all([
     q ? recordSearch(q) : Promise.resolve(),
@@ -64,7 +65,7 @@ export default async function JobsPage({
       </h1>
       <p style={{ color: "var(--ink-muted)", marginTop: 5, marginBottom: 16, fontSize: 13.5 }}>
         {jobs.length} listing{jobs.length === 1 ? "" : "s"} aggregated from LinkedIn, Y
-        Combinator, RemoteOK &amp; Talentd
+        Combinator &amp; Talentd
         {isDefaultIndiaScope && (
           <span style={{ color: "var(--ink-faint)" }}>
             {" "}
@@ -80,6 +81,13 @@ export default async function JobsPage({
         postedWithin={postedWithin}
         sort={sort}
         experienceLevel={experienceLevel}
+        company={company}
+        tags={tags}
+        employmentType={employmentType}
+        source={source}
+        hasSalary={hasSalary}
+        salaryMin={salaryMin}
+        hideIncomplete={hideIncomplete}
         action="/jobs"
       />
       <div className="jobs-layout">
@@ -112,10 +120,13 @@ export default async function JobsPage({
             </p>
           ) : (
             <JobFeed
-              key={`${q ?? ""}|${location ?? ""}|${workplaceType ?? ""}|${postedWithin ?? ""}|${sort ?? ""}|${experienceLevel ?? ""}`}
+              key={`${q ?? ""}|${location ?? ""}|${workplaceType ?? ""}|${postedWithin ?? ""}|${sort ?? ""}|${experienceLevel ?? ""}|${company ?? ""}|${tags ?? ""}|${employmentType ?? ""}|${JSON.stringify(source ?? "")}|${hasSalary ?? ""}|${salaryMin ?? ""}|${hideIncomplete ?? ""}`}
               initialJobs={jobs}
               initialMode={initialMode}
-              filters={{ q, location, workplaceType, postedWithin, sort, experienceLevel }}
+              filters={{
+                q, location, workplaceType, postedWithin, sort, experienceLevel,
+                company, tags, employmentType, source, hasSalary, salaryMin, hideIncomplete,
+              }}
             />
           )}
         </div>

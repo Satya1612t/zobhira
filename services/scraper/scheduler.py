@@ -1,5 +1,6 @@
 import logging
 import threading
+from contextlib import nullcontext
 from datetime import datetime, time, timedelta, timezone
 
 from apscheduler.schedulers.blocking import BlockingScheduler
@@ -10,6 +11,14 @@ from dotenv import load_dotenv
 from db.repository import connect, get_enabled_sources, get_recent_searches, reap_expired, reap_stale, record_source_error
 from scripts.run_scrape import run_source
 from taxonomy import STREAM_QUERIES
+from utils.browser import get_browser
+
+# Sources whose scraper launches its own Playwright browser (see
+# scrapers/{linkedin,ycombinator,talentd}.py) — each of these is swept with
+# up to 15 queries per run, so hoisting one browser for the whole loop below
+# (instead of one launch per query, per list/enrich phase — up to 30 cold
+# Chromium starts per LinkedIn sweep before this) is worth the plumbing.
+PLAYWRIGHT_SOURCES = {"linkedin", "ycombinator", "talentd"}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -18,25 +27,42 @@ REAP_STALE_AFTER_DAYS = 30
 REAP_EVERY_HOURS = 24
 DEFAULT_EXPIRY_DAYS = 30  # for jobs with no source-provided deadline_at
 
-# Naukri and Indeed scrapers were removed entirely (see README Notes) —
-# Naukri was confirmed blocked at the bot-detection level, and Indeed's
+# Naukri, Indeed, and RemoteOK scrapers were removed entirely (see README
+# Notes) — Naukri was confirmed blocked at the bot-detection level, Indeed's
 # detail pages were only reliably readable for the single page-preloaded
-# first job per query, which the mandatory-description rule in
-# scripts/run_scrape.py would discard almost everything else for anyway.
+# first job per query (which the mandatory-description rule in
+# scripts/run_scrape.py would discard almost everything else for anyway),
+# and RemoteOK's real application link is gated behind a mandatory account
+# signup for most listings (confirmed live: traced the obfuscated JS redirect
+# all the way to a `/sign-up?user_type=worker` wall) — not something users
+# can act on from an aggregated listing here.
 # This platform is India-focused (see README), so every query is scraped
 # with location="India" — sources that don't support a location param
-# (YC/RemoteOK) just ignore it, same as live search.
+# (YC) just ignore it, same as live search.
 LOCATION = "India"
 # Raised from 15 after a live test (detail_limit=40: 32/40 postings got a
 # usable description, ~80% success rate, no bot-blocking/CAPTCHA at any
 # point) confirmed enrichment success rate holds steady deeper into the
 # results list. 25 is a middle ground between the old 15 and the tested 40
 # — more usable postings per query without tripling sweep time.
+#
+# LinkedIn keeps the conservative 25 (highest bot-detection risk of the four
+# — see linkedin.py's own docstring). YC and Talentd are quiet, low-volume,
+# low-risk sites swept only every 2-3 days (see TIER_SOURCES below), so
+# capping them at the same 25 as LinkedIn's daily high-frequency sweep left
+# most of what they actually have unenriched for no real reason — raised to
+# 100 (comfortably above either site's typical per-query result count, so
+# it acts as "enrich everything found" rather than a real cap).
 DETAIL_LIMIT = 25
+DETAIL_LIMIT_BY_SOURCE: dict[str, int] = {
+    "linkedin": 25,
+    "ycombinator": 100,
+    "talentd": 100,
+}
 
 # Sources are tiered by real-world posting volume (see chat discussion citing
-# LinkedIn as the high-volume platform vs. RemoteOK/Talentd/YC as low-volume
-# niche boards) rather than all swept on one cadence: high-volume sources are
+# LinkedIn as the high-volume platform vs. Talentd/YC as low-volume niche
+# boards) rather than all swept on one cadence: high-volume sources are
 # checked daily, low-volume ones less often since there's little new to find
 # in between. All tiers fire at 02:00 local time so they don't compete with
 # daytime traffic/usage.
@@ -50,8 +76,8 @@ RUN_AT = time(hour=2, minute=0)
 MAX_AGE_HOURS = 15 * 24
 
 TIER_SOURCES: dict[str, list[str]] = {
-    "daily": ["linkedin"],
-    "every_2_days": ["talentd", "remoteok"],
+    "daily": ["linkedin", "himalayas"],
+    "every_2_days": ["talentd"],
     "every_3_days": ["ycombinator"],
 }
 
@@ -71,14 +97,13 @@ RECENT_SEARCHES_DELAY_SECONDS = 60 * 60  # 1 hour
 # Sources whose deterministic scraper has no real server-side search — each
 # just loads one fixed listing page/API response and filters by substring
 # match against the title client-side (confirmed by reading scrape_list() in
-# scrapers/ycombinator.py, scrapers/talentd.py, scrapers/remoteok.py).
-# Looping many queries against these just re-fetches and re-filters the same
-# fixed page/response over and over, missing anything whose title doesn't
-# contain any query term — so they get a single query-less pass instead.
-# LinkedIn builds a real `q=<query>` server-side search URL, where query
-# breadth actually changes what comes back, so it keeps the STREAM_QUERIES
-# loop.
-NO_SEARCH_SOURCES: set[str] = {"ycombinator", "talentd", "remoteok"}
+# scrapers/ycombinator.py, scrapers/talentd.py). Looping many queries
+# against these just re-fetches and re-filters the same fixed page/response
+# over and over, missing anything whose title doesn't contain any query
+# term — so they get a single query-less pass instead. LinkedIn builds a
+# real `q=<query>` server-side search URL, where query breadth actually
+# changes what comes back, so it keeps the STREAM_QUERIES loop.
+NO_SEARCH_SOURCES: set[str] = {"ycombinator", "talentd"}
 SOURCE_TIER: dict[str, str] = {
     source: tier for tier, sources in TIER_SOURCES.items() for source in sources
 }
@@ -124,8 +149,8 @@ def _sweep(sources: list[str]) -> None:
     concurrent, for the same reliability reason live search is sequential
     (running several Playwright browsers at once caused real contention
     failures under load). Exception: sources in NO_SEARCH_SOURCES (YC,
-    Talentd, RemoteOK) have no server-side search, so they get a single
-    query-less pass instead of the 15-query loop.
+    Talentd) have no server-side search, so they get a single query-less
+    pass instead of the 15-query loop.
 
     `mark_stale=False` on every call is required,
     not optional: looping many queries against the same source in one run
@@ -176,31 +201,41 @@ def _sweep(sources: list[str]) -> None:
                 "current_query": None,
             }
             errors = 0
-            for query in queries:
-                _current["current_query"] = query or "(all listings, no query filter)"
-                try:
-                    count = run_source(
-                        source, query=query, location=LOCATION,
-                        mark_stale=False, detail_limit=DETAIL_LIMIT,
-                        max_age_hours=MAX_AGE_HOURS, max_results=None,
-                    )
-                    logger.info("source=%s query=%r -> %d postings saved", source, query, count)
-                    _current["saved_count"] += count
-                except Exception as exc:
-                    logger.exception(
-                        "Scheduled scrape failed for source=%s query=%r", source, query
-                    )
-                    errors += 1
+            # One browser for this source's whole multi-query loop (only for
+            # sources that actually use Playwright — see PLAYWRIGHT_SOURCES)
+            # instead of a fresh launch per query, per list/enrich phase.
+            browser_ctx = get_browser() if source in PLAYWRIGHT_SOURCES else nullcontext(None)
+            # Cross-query overlap tracking (see run_source's seen_dedup_keys
+            # docstring) — only meaningful for the real STREAM_QUERIES loop,
+            # not the single query-less pass NO_SEARCH_SOURCES gets.
+            seen_dedup_keys = set() if source not in NO_SEARCH_SOURCES else None
+            with browser_ctx as sweep_browser:
+                for query in queries:
+                    _current["current_query"] = query or "(all listings, no query filter)"
                     try:
-                        error_conn = connect()
+                        count = run_source(
+                            source, query=query, location=LOCATION,
+                            mark_stale=False, detail_limit=DETAIL_LIMIT_BY_SOURCE.get(source, DETAIL_LIMIT),
+                            max_age_hours=MAX_AGE_HOURS, max_results=None,
+                            browser=sweep_browser, seen_dedup_keys=seen_dedup_keys,
+                        )
+                        logger.info("source=%s query=%r -> %d postings saved", source, query, count)
+                        _current["saved_count"] += count
+                    except Exception as exc:
+                        logger.exception(
+                            "Scheduled scrape failed for source=%s query=%r", source, query
+                        )
+                        errors += 1
                         try:
-                            record_source_error(error_conn, source, str(exc))
-                        finally:
-                            error_conn.close()
-                    except Exception:
-                        logger.warning("Could not record last_error for source=%s", source)
-                finally:
-                    _current["completed_steps"] += 1
+                            error_conn = connect()
+                            try:
+                                record_source_error(error_conn, source, str(exc))
+                            finally:
+                                error_conn.close()
+                        except Exception:
+                            logger.warning("Could not record last_error for source=%s", source)
+                    finally:
+                        _current["completed_steps"] += 1
             finished_at = datetime.now(timezone.utc)
             _last_runs[source] = {
                 "started_at": started_at.isoformat(), "finished_at": finished_at.isoformat(),
@@ -214,8 +249,8 @@ def _sweep(sources: list[str]) -> None:
 def scrape_recent_searches_linkedin() -> None:
     """LinkedIn only, queried against recent real user searches instead of
     STREAM_QUERIES — same run_source() call, same caveats (real server-side
-    search, 24h f_TPR filter + India geoId, DETAIL_LIMIT=25 enrichment cap,
-    mandatory 5-field rule, dedup) as the regular daily sweep. Shares the
+    search, 48h f_TPR filter + India geoId, DETAIL_LIMIT=25 enrichment cap,
+    mandatory 4-field rule, dedup) as the regular daily sweep. Shares the
     same _lock as every other sweep, so if something is still running when
     the 1-hour delay (see _maybe_chain_recent_searches_sweep) elapses, this
     just skips rather than stacking."""
@@ -243,21 +278,25 @@ def scrape_recent_searches_linkedin() -> None:
             "current_query": None,
         }
         errors = 0
-        for query in queries:
-            _current["current_query"] = query
-            try:
-                count = run_source(
-                    source, query=query, location=LOCATION,
-                    mark_stale=False, detail_limit=DETAIL_LIMIT,
-                    max_age_hours=MAX_AGE_HOURS, max_results=None,
-                )
-                logger.info("recent-search query=%r -> %d postings saved", query, count)
-                _current["saved_count"] += count
-            except Exception:
-                logger.exception("Recent-searches LinkedIn scrape failed for query=%r", query)
-                errors += 1
-            finally:
-                _current["completed_steps"] += 1
+        # LinkedIn always uses Playwright — one shared browser for this
+        # whole 12-query loop instead of one launch per query.
+        with get_browser() as sweep_browser:
+            for query in queries:
+                _current["current_query"] = query
+                try:
+                    count = run_source(
+                        source, query=query, location=LOCATION,
+                        mark_stale=False, detail_limit=DETAIL_LIMIT_BY_SOURCE.get(source, DETAIL_LIMIT),
+                        max_age_hours=MAX_AGE_HOURS, max_results=None,
+                        browser=sweep_browser,
+                    )
+                    logger.info("recent-search query=%r -> %d postings saved", query, count)
+                    _current["saved_count"] += count
+                except Exception:
+                    logger.exception("Recent-searches LinkedIn scrape failed for query=%r", query)
+                    errors += 1
+                finally:
+                    _current["completed_steps"] += 1
         finished_at = datetime.now(timezone.utc)
         _last_runs["linkedin_recent_searches"] = {
             "started_at": started_at.isoformat(), "finished_at": finished_at.isoformat(),
@@ -294,9 +333,8 @@ def scrape_daily() -> None:
 
 
 def scrape_every_2_days() -> None:
-    """Lower-volume sources: Talentd, then RemoteOK — every 2 days at 02:00.
-    Both are in NO_SEARCH_SOURCES: single query-less pass each, not the
-    15-query loop."""
+    """Talentd — every 2 days at 02:00. In NO_SEARCH_SOURCES: a single
+    query-less pass, not the 15-query loop."""
     _sweep(TIER_SOURCES["every_2_days"])
 
 
@@ -364,7 +402,7 @@ def main() -> None:
     scheduler.add_job(reap_expired_jobs, "interval", hours=REAP_EVERY_HOURS, next_run_time=None)
 
     logger.info(
-        "Scheduler started: linkedin daily, talentd+remoteok every 2 days, "
+        "Scheduler started: linkedin daily, talentd every 2 days, "
         "ycombinator every 3 days, all at %02d:%02d local; %d streams/source; "
         "reap_stale/reap_expired every %d hours",
         RUN_AT.hour, RUN_AT.minute, len(STREAM_QUERIES), REAP_EVERY_HOURS,

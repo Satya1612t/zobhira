@@ -41,8 +41,8 @@ const POLL_INTERVAL_MS = 3000;
 // `source` alone.
 const SOURCES: { key: string; label: string; cadence: string; sourceKey: string; matchTier?: string }[] = [
   { key: "linkedin", label: "LinkedIn", cadence: "Daily", sourceKey: "linkedin" },
+  { key: "himalayas", label: "Himalayas", cadence: "Daily", sourceKey: "himalayas" },
   { key: "talentd", label: "Talentd", cadence: "Every 2 Days", sourceKey: "talentd" },
-  { key: "remoteok", label: "RemoteOK", cadence: "Every 2 Days", sourceKey: "remoteok" },
   { key: "ycombinator", label: "YCombinator", cadence: "Every 3 Days", sourceKey: "ycombinator" },
   {
     key: "linkedin_recent_searches",

@@ -71,6 +71,27 @@ export function JobCard({ job }: { job: JobListItem }) {
           )}
         </div>
       </Link>
+
+      {/* Himalayas' terms require a visible attribution link back to
+          himalayas.app on any listing sourced from them. */}
+      {job.source === "himalayas" && (
+        <a
+          href={job.sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            display: "inline-block",
+            marginTop: 10,
+            fontSize: 12,
+            fontWeight: 600,
+            color: "var(--ink-faint)",
+            textDecoration: "none",
+          }}
+        >
+          via Himalayas ↗
+        </a>
+      )}
     </div>
   );
 }

@@ -213,7 +213,7 @@ export default async function JobDetailPage({
             )}
 
             <div style={{ marginTop: 20 }}>
-              <JobDetailActions jobTitle={job.title} company={job.company} />
+              <JobDetailActions sourceUrl={job.sourceUrl} />
             </div>
 
             <a

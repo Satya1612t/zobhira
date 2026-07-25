@@ -1,7 +1,7 @@
 # Job Portal
 
 A searchable job board aggregating technical roles from LinkedIn, Y Combinator / Work at
-a Startup, RemoteOK, and Talentd — plus a companion contest/hackathon aggregator sourced
+a Startup, and Talentd — plus a companion contest/hackathon aggregator sourced
 from public RSS/JSON feeds (DEV Community). Both are kept fresh by background scrapers
 and enriched with an optional, self-hostable LLM pass for cleaner descriptions and
 highlighted facts.
@@ -38,7 +38,6 @@ highlighted facts.
    playwright install chromium
    copy .env.example .env   # fill in DATABASE_URL (+ optional LLM keys, see below)
    python -m scripts.run_scrape --source ycombinator --query "software engineer"
-   python -m scripts.run_scrape --source remoteok --query "software engineer"
    python -m scripts.run_scrape --source talentd --query "software engineer"
    python -m scripts.run_scrape --source linkedin --query "software engineer"
    python -m scripts.run_contest_scrape --source dev_community
@@ -90,13 +89,13 @@ same volume, so there's no contention risk like there is *within* a family):
 | Source | Cadence | Time |
 |---|---|---|
 | LinkedIn | Daily | 02:00 local |
-| Talentd + RemoteOK | Every 2 days | 02:00 local |
+| Talentd | Every 2 days | 02:00 local |
 | YCombinator | Every 3 days | 02:00 local |
 | LinkedIn (recent user searches) | 3x/week (Mon/Wed/Fri) | 1h after the daily LinkedIn sweep finishes |
 | Reap stale jobs (`is_active=false` if unscraped 30+ days) | Every 24h | — |
 | Reap expired jobs (deadline passed, or 30+ days old with none) | Every 24h | — |
 
-Manual triggers: `POST /scheduler/trigger/{source}` (`linkedin`/`talentd`/`remoteok`/
+Manual triggers: `POST /scheduler/trigger/{source}` (`linkedin`/`talentd`/
 `ycombinator`), `POST /scheduler/trigger/recent-searches/linkedin`. Progress:
 `GET /scheduler/progress`.
 
@@ -120,14 +119,13 @@ Every job scraper implements the same interface (`scrapers/base.py`): `scrape_li
 — visits each job's own page for description/logo/date, capped by `detail_limit` per
 query). `scrape()` composes both for CLI/scheduler use.
 
-**LinkedIn** has a real server-side search (with a 24h recency filter and India geo-ID
-baked into the URL); **RemoteOK, Talentd, and YCombinator** don't — each just loads one
+**LinkedIn** has a real server-side search (with a recency filter and India geo-ID
+baked into the URL); **Talentd and YCombinator** don't — each just loads one
 fixed page/API response and is swept once per run with no query loop, since looping
-queries against a client-side-only filter just re-fetches the same content. RemoteOK's
-public JSON API returns everything (description, tags, date) in one shot with no
-detail-page pass needed; Talentd and YCombinator need the detail-page `enrich()` pass
-like LinkedIn does. Per-designation tagging is recovered afterward by classifying each
-scraped title against a 58-designation list, regardless of which query found it.
+queries against a client-side-only filter just re-fetches the same content. Both need
+the detail-page `enrich()` pass like LinkedIn does. Per-designation tagging is recovered
+afterward by classifying each scraped title against a 58-designation list, regardless of
+which query found it.
 
 Contests follow a simpler shape (`scrapers/contest_base.py`) — one bounded
 `scrape()` call per source, no query/location/detail_limit concept, since a contest
@@ -135,9 +133,11 @@ platform's feed is "what's currently open," not something to keyword-search.
 
 **Every posting goes through the same guardrail before it reaches the DB**
 (`scripts/run_scrape.py::has_mandatory_fields` / `scripts/run_contest_scrape.py`):
-- **Jobs** require title, company, description, location, and `source_url` — anything
-  missing one gets discarded (a missing logo alone doesn't count; that's a best-effort
-  backfill via `utils/logo_lookup.py`).
+- **Jobs** require title, company, location, and `source_url` — anything missing one
+  gets discarded. A missing description no longer discards a posting — it's saved as a
+  "stub" (still fully usable: title/company/location/apply link) and backfilled by a
+  later sweep's `enrich()` pass once it re-finds the same posting; a missing logo alone
+  doesn't count either, that's a best-effort backfill via `utils/logo_lookup.py`.
 - **Contests** require title, description, a start date, and an end date, **and** the
   end date must not have already passed — anything missing one, or already expired, is
   discarded before it's ever stored.
@@ -229,8 +229,6 @@ only) is untouched and still used for local dev as described above.
   breaks.
 - **Logo / description / posted-date coverage varies by source** — most only expose full
   details on each job's individual detail page, not the search results list:
-  - **RemoteOK**: description + posted date come free from the API; logos are pulled
-    from the homepage (only jobs currently listed there get one).
   - **YCombinator**: logo + full description from each job's detail page. No posted date
     exists anywhere on the site — this field is always empty for YC.
   - **Talentd**: logo + full description + posted date + real numeric salary, all from a
@@ -240,12 +238,17 @@ only) is untouched and still used for local dev as described above.
     description to fetch).
   - **DEV Community** (contests): no structured deadline/prize/mode at all — these are
     gap-filled from the post's own prose via the LLM pass described above when present.
-- **Naukri and Indeed were removed entirely** (scrapers, config, historical rows).
-  Naukri was confirmed blocked at the bot-detection level (Akamai/bot-manager-level
+- **Naukri, Indeed, and RemoteOK were removed entirely** (scrapers, config, historical
+  rows). Naukri was confirmed blocked at the bot-detection level (Akamai/bot-manager-level
   403/406 + reCAPTCHA on both the site and its internal API, even with a realistic
   browser context). Indeed's detail pages were only reliably readable for the single
   page-preloaded first job per query — every other detail page hit a 403 interstitial —
   which under the mandatory-description rule left it with ~1 usable posting per query.
+  RemoteOK's real application link turned out to be gated behind a mandatory account
+  signup for most listings — confirmed live by tracing its deliberately obfuscated
+  "apply" redirect (reversed/double-base64-encoded JS, presumably meant to block exactly
+  this kind of scripted inspection) all the way through to a `/sign-up?user_type=worker`
+  wall, with no way to reach the real employer URL without an account.
 - **Devpost was removed as a contest source.** Its public list API returns rich
   structured metadata (prize, dates, organizer) but no free-text description field at
   all, so every Devpost posting failed the mandatory-description guardrail once it was

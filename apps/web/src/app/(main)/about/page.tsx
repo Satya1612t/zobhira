@@ -10,13 +10,13 @@ export default function AboutPage() {
           color: "var(--ink)",
         }}
       >
-        About Job Portal
+        About Zobhira
       </h1>
       <div style={{ color: "var(--ink)", fontSize: 14.5, lineHeight: 1.7 }}>
         <p>
-          Job Portal aggregates technical job listings from Y Combinator / Work at a Startup,
-          RemoteOK, Talentd, and LinkedIn into one searchable board, curated for India-based and
-          remote roles.
+          Zobhira aggregates technical job listings from Y Combinator / Work at a Startup,
+          Talentd, LinkedIn, and Himalayas into one searchable board, curated for India-based
+          and remote roles.
         </p>
         <p>
           Listings are collected on a scheduled basis rather than on-demand, so what you see here

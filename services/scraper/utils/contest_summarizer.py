@@ -34,8 +34,8 @@ def summarize_contest(description: str | None, *, known_starts_at: str | None = 
         return empty
 
     # Lazy import, not module-top — matches the exact convention every
-    # existing scraper's _scrape_with_llm already follows (remoteok.py,
-    # linkedin.py, talentd.py, ycombinator.py). llm_fallback.py reads
+    # existing scraper's _scrape_with_llm already follows (linkedin.py,
+    # talentd.py, ycombinator.py). llm_fallback.py reads
     # FREELLMAPI_BASE_URL/FREELLMAPI_API_KEY from os.environ at IMPORT
     # time; importing it at module top here meant it got evaluated (and
     # frozen to None) before main()'s load_dotenv() call ever ran, since

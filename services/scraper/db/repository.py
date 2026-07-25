@@ -12,13 +12,13 @@ INSERT INTO jobs (
     dedup_key, title, company, location, workplace_type,
     salary_min, salary_max, salary_currency,
     source, source_url, description, tags, posted_at, deadline_at, logo_url,
-    last_scraped_at, is_active, extraction_method, raw
+    last_scraped_at, is_active, extraction_method, employment_type, seniority, raw
 )
 VALUES (
     %(dedup_key)s, %(title)s, %(company)s, %(location)s, %(workplace_type)s,
     %(salary_min)s, %(salary_max)s, %(salary_currency)s,
     %(source)s, %(source_url)s, %(description)s, %(tags)s, %(posted_at)s, %(deadline_at)s, %(logo_url)s,
-    now(), true, %(extraction_method)s, %(raw)s
+    now(), true, %(extraction_method)s, %(employment_type)s, %(seniority)s, %(raw)s
 )
 ON CONFLICT (dedup_key) DO UPDATE SET
     last_scraped_at = now(),
@@ -29,13 +29,21 @@ ON CONFLICT (dedup_key) DO UPDATE SET
     salary_min = EXCLUDED.salary_min,
     salary_max = EXCLUDED.salary_max,
     salary_currency = EXCLUDED.salary_currency,
-    description = EXCLUDED.description,
-    tags = EXCLUDED.tags,
+    employment_type = COALESCE(EXCLUDED.employment_type, jobs.employment_type),
+    seniority = COALESCE(EXCLUDED.seniority, jobs.seniority),
+    -- A re-scrape that skipped enrichment (see run_scrape.py's dedup-key
+    -- pre-check, added to stop re-fetching detail pages we already have a
+    -- description for) submits a posting with description/tags/raw/logo_url
+    -- back to their sparse list-only values. COALESCE/length-guard these so
+    -- that skip never wipes out a previously-enriched row — only a genuinely
+    -- fresh (non-empty) value from this scrape is allowed to overwrite them.
+    description = COALESCE(EXCLUDED.description, jobs.description),
+    tags = CASE WHEN array_length(EXCLUDED.tags, 1) > 0 THEN EXCLUDED.tags ELSE jobs.tags END,
     posted_at = EXCLUDED.posted_at,
     deadline_at = EXCLUDED.deadline_at,
-    logo_url = EXCLUDED.logo_url,
+    logo_url = COALESCE(EXCLUDED.logo_url, jobs.logo_url),
     extraction_method = EXCLUDED.extraction_method,
-    raw = EXCLUDED.raw;
+    raw = COALESCE(jobs.raw, '{}'::jsonb) || COALESCE(EXCLUDED.raw, '{}'::jsonb);
 """
 
 _EXISTS_BY_DEDUP_KEY_SQL = "SELECT EXISTS (SELECT 1 FROM jobs WHERE dedup_key = %(dedup_key)s) AS found;"
@@ -45,11 +53,27 @@ _EXISTS_BY_DEDUP_KEY_SQL = "SELECT EXISTS (SELECT 1 FROM jobs WHERE dedup_key = 
 # (slightly different title wording, punctuation, location formatting)
 # without needing an exact match. Company match keeps this from firing
 # across unrelated companies that happen to post similarly-worded roles.
+#
+# A GIN trigram index on jobs.title already exists (jobs_title_trgm_idx,
+# db/migrations/0003_add_trgm.sql) — but calling similarity(title, ...) > 0.6
+# as a plain function comparison, on its own, can't be planned against that
+# index at all: pg_trgm's GIN/GiST operator classes only index the `%`
+# (and <%, %>) operators, not arbitrary similarity() calls, so this was
+# still a full sequential scan over every active job despite the index
+# existing. Adding `title %% %(title)s` (pg_trgm's index-aware similarity
+# operator, using the default 0.3 pg_trgm.similarity_threshold — always a
+# superset of the stricter 0.6 cutoff below, so it can only broaden the
+# candidate set the index scan finds, never wrongly narrow it) lets the
+# planner use the GIN index to shortlist candidates first; the exact
+# similarity(...) > 0.6 check then applies only to that shortlist, not
+# every row. `%%` (not `%`) because psycopg's own `%(name)s` parameter
+# placeholders would otherwise misparse a literal `%`.
 _SIMILAR_EXISTS_SQL = """
 SELECT EXISTS (
     SELECT 1 FROM jobs
     WHERE is_active = true
       AND lower(company) = lower(%(company)s)
+      AND title %% %(title)s
       AND similarity(title, %(title)s) > 0.6
 ) AS found;
 """
@@ -128,10 +152,66 @@ def upsert_job(conn: psycopg.Connection, posting: JobPosting) -> bool:
                 "deadline_at": posting.deadline_at,
                 "logo_url": posting.logo_url,
                 "extraction_method": posting.extraction_method,
+                "employment_type": posting.employment_type,
+                "seniority": posting.seniority,
                 "raw": psycopg.types.json.Json(posting.raw),
             },
         )
     return True
+
+
+def get_known_dedup_keys(conn: psycopg.Connection, dedup_keys: list[str]) -> set[str]:
+    """Returns the subset of `dedup_keys` that already have a real
+    description saved — used to skip re-enriching (a full detail-page load)
+    a job whose description we've already successfully fetched in a past
+    run. Doesn't check `is_active`: a job that went stale/inactive but still
+    has its description saved shouldn't be re-fetched just because a later
+    sweep sees it posted again under the same dedup_key."""
+    if not dedup_keys:
+        return set()
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT dedup_key FROM jobs WHERE dedup_key = ANY(%(keys)s) AND description IS NOT NULL",
+            {"keys": dedup_keys},
+        )
+        return {row["dedup_key"] for row in cur.fetchall()}
+
+
+_COUNT_RECENT_REPOSTS_SQL = """
+SELECT count(*) AS count FROM jobs
+WHERE lower(company) = lower(%(company)s)
+  AND lower(title) = lower(%(title)s)
+  AND first_seen_at >= %(cutoff)s;
+"""
+
+_FLAG_REPOST_SQL = """
+UPDATE jobs
+SET raw = raw || jsonb_build_object('repost_count_30d', %(count)s, 'flagged_ghost_listing', %(flagged)s)
+WHERE dedup_key = %(dedup_key)s;
+"""
+
+
+def flag_if_repost(conn: psycopg.Connection, posting: JobPosting, cutoff, threshold: int) -> int:
+    """Counts how many distinct postings share this (company, title) pair
+    within the window ending at `cutoff` — regardless of active status, so
+    an expired-then-reposted listing still counts — and flags the
+    just-upserted row if that count exceeds `threshold`. Demotes, doesn't
+    delete: some genuinely high-volume employers post several distinct real
+    openings under a near-identical title, so this is a signal for ranking
+    to eventually use (see PART 3's quality_score), not an auto-reject.
+    Returns the count; callers decide what (if anything) to log."""
+    dedup_key = make_dedup_key(posting.company, posting.title, posting.location)
+    with conn.cursor() as cur:
+        cur.execute(
+            _COUNT_RECENT_REPOSTS_SQL,
+            {"company": posting.company, "title": posting.title, "cutoff": cutoff},
+        )
+        count = cur.fetchone()["count"]
+        cur.execute(
+            _FLAG_REPOST_SQL,
+            {"count": count, "flagged": count > threshold, "dedup_key": dedup_key},
+        )
+    return count
 
 
 def mark_stale_inactive(conn: psycopg.Connection, source: str, cutoff) -> None:
@@ -364,5 +444,39 @@ def record_source_error(conn: psycopg.Connection, source: str, error: str) -> No
         cur.execute(
             "UPDATE scraper_sources SET last_error = %(error)s, last_error_at = now() WHERE name = %(source)s",
             {"error": error[:2000], "source": source},
+        )
+    conn.commit()
+
+
+def get_cached_domain(conn: psycopg.Connection, company_key: str) -> tuple[bool, str | None]:
+    """Returns (found, domain) — used by utils/logo_lookup.py to skip
+    re-querying Clearbit for a company already resolved in a past run.
+    `found=False` means this company has never been looked up before,
+    `found=True, domain=None` is a cached *negative* result (looked up,
+    nothing matched) — a real, meaningful distinction: a not-yet-cached
+    company should be looked up, but an already-checked-and-empty one
+    shouldn't be re-queried just because `domain` is falsy."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT domain FROM company_domains WHERE company = %(company)s",
+            {"company": company_key},
+        )
+        row = cur.fetchone()
+        if row is None:
+            return False, None
+        return True, row["domain"]
+
+
+def cache_domain(conn: psycopg.Connection, company_key: str, domain: str | None) -> None:
+    """Commits itself — called opportunistically as each new company is
+    resolved during a sweep, not part of the shared upsert-batch
+    transaction."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO company_domains (company, domain) VALUES (%(company)s, %(domain)s)
+            ON CONFLICT (company) DO UPDATE SET domain = EXCLUDED.domain, resolved_at = now();
+            """,
+            {"company": company_key, "domain": domain},
         )
     conn.commit()

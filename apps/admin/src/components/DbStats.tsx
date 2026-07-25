@@ -5,9 +5,9 @@ import { adminFetch } from "@/lib/adminFetch";
 
 const SOURCE_LABELS: Record<string, string> = {
   ycombinator: "Y Combinator",
-  remoteok: "RemoteOK",
   talentd: "Talentd",
   linkedin: "LinkedIn",
+  himalayas: "Himalayas",
 };
 
 type SourceCount = { source: string; total: number; active: number };

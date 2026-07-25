@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     template: "%s | Zobhira",
   },
   description:
-    "Zobhira aggregates technical job listings and hackathons from LinkedIn, Y Combinator, RemoteOK, Talentd, and DEV Community into one searchable board, refreshed around the clock.",
+    "Zobhira aggregates technical job listings and hackathons from LinkedIn, Y Combinator, Talentd, Himalayas, and DEV Community into one searchable board, refreshed around the clock.",
 };
 
 // No app-shell here — the sidebar/navbar/footer chrome lives in

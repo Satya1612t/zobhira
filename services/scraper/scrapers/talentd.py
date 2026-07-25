@@ -3,9 +3,9 @@ import logging
 from datetime import datetime
 from urllib.parse import urljoin
 
-from playwright.sync_api import sync_playwright
-
 from scrapers.base import BaseJobScraper, JobPosting, SelectorNotFoundError
+from utils.browser import block_heavy_resources, get_browser, run_concurrently
+from utils.enrichment import select_unenriched
 from utils.rate_limit import throttle
 
 logger = logging.getLogger(__name__)
@@ -28,10 +28,10 @@ class TalentdScraper(BaseJobScraper):
     source_name = "talentd"
 
     def scrape(
-        self, query: str, location: str | None = None, detail_limit: int | None = None
+        self, query: str, location: str | None = None, detail_limit: int | None = None, browser=None
     ) -> list[JobPosting]:
         try:
-            return self._scrape_deterministic(query, location, detail_limit)
+            return self._scrape_deterministic(query, location, detail_limit, browser)
         except SelectorNotFoundError:
             logger.warning(
                 "Talentd deterministic selectors found nothing — falling back to LLM extraction"
@@ -39,29 +39,34 @@ class TalentdScraper(BaseJobScraper):
             return self._scrape_with_llm(query, location)
 
     def _scrape_deterministic(
-        self, query: str, location: str | None, detail_limit: int | None = None
+        self, query: str, location: str | None, detail_limit: int | None = None, browser=None
     ) -> list[JobPosting]:
         """CLI/scheduler path: list + enrich in one call. Live search
         (api.py) calls `scrape_list` and `enrich` separately instead, so
         listing can be upserted and a small batch enriched without doing
-        the full detail pass up front."""
-        postings = self.scrape_list(query, location)
-        self.enrich(postings, detail_limit)
+        the full detail pass up front.
+
+        `detail_limit` only counts postings we don't already have a
+        description for (see utils/enrichment.py) — a repeat sweep a few
+        days later shouldn't re-fetch the same descriptions it already has."""
+        postings = self.scrape_list(query, location, browser)
+        to_enrich = select_unenriched(postings, detail_limit)
+        self.enrich(to_enrich, detail_limit=len(to_enrich) or None, browser=browser)
         return postings
 
-    def scrape_list(self, query: str, location: str | None = None) -> list[JobPosting]:
+    def scrape_list(self, query: str, location: str | None = None, browser=None) -> list[JobPosting]:
         throttle(JOBS_URL)
         postings: list[JobPosting] = []
         query_lower = query.lower() if query else ""
 
-        with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=True)
-            page = browser.new_page(
+        with get_browser(browser) as br:
+            page = br.new_page(
                 user_agent=(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
                 )
             )
+            block_heavy_resources(page)
             try:
                 page.goto(JOBS_URL, wait_until="domcontentloaded", timeout=20000)
                 try:
@@ -138,33 +143,25 @@ class TalentdScraper(BaseJobScraper):
                     )
 
             finally:
-                browser.close()
+                page.close()
 
         if not postings:
             raise SelectorNotFoundError("Parsed 0 postings from Talentd jobs page")
         return postings
 
-    def enrich(self, postings: list[JobPosting], detail_limit: int | None = None) -> None:
+    def enrich(self, postings: list[JobPosting], detail_limit: int | None = None, browser=None) -> None:
         """Runs the per-job detail-page fetch (description/date/salary/logo)
         over already-built postings, mutating them in place. Separated from
         `scrape_list` so live search can enrich just a small batch (5, then
-        +10 on scroll) instead of the whole result set up front."""
+        +10 on scroll) instead of the whole result set up front.
+
+        Runs across several concurrent worker threads (see utils/browser.py's
+        run_concurrently) — each owns its own browser, since Playwright's
+        sync API can't safely share one across threads. `browser` (accepted
+        for interface consistency with scrape_list()) is unused here for
+        that same reason."""
         targets = postings[:detail_limit] if detail_limit else postings
-        if not targets:
-            return
-        with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=True)
-            page = browser.new_page(
-                user_agent=(
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-                )
-            )
-            try:
-                for posting in targets:
-                    self._fetch_detail(page, posting)
-            finally:
-                browser.close()
+        run_concurrently(targets, self._fetch_detail)
 
     def _fetch_detail(self, page, posting: JobPosting) -> None:
         """Each job detail page embeds a schema.org JobPosting node across
@@ -229,9 +226,41 @@ class TalentdScraper(BaseJobScraper):
                 posting.salary_max = value.get("maxValue")
                 posting.salary_currency = base_salary.get("currency") or posting.salary_currency
 
-            logo = (job_node.get("hiringOrganization") or {}).get("logo")
+            hiring_org = job_node.get("hiringOrganization") or {}
+            logo = hiring_org.get("logo")
             if logo:
                 posting.logo_url = logo
+            # Detail-page name is cleaner than the list-card text (which
+            # sometimes truncates or includes stray punctuation) — verified
+            # against 3 real postings, always present and correct.
+            org_name = hiring_org.get("name")
+            if org_name:
+                posting.company = org_name
+
+            # Real, structured fields confirmed present on every Talentd
+            # posting checked (3/3) — not guessed from the description text.
+            # `qualifications`/`responsibilities`/`industry`/`jobLocationType`
+            # were also checked for and are NOT present on any of the 3, so
+            # they're deliberately not read here (no dead lookups).
+            employment_type = job_node.get("employmentType")
+            if employment_type:
+                # Match the existing tag style already used elsewhere
+                # (e.g. YCombinator's "Fulltime", not "full-time").
+                normalized = employment_type.replace("-", "").replace(" ", "").capitalize()
+                if normalized and normalized not in posting.tags:
+                    posting.tags.append(normalized)
+
+            # `experienceRequirements` ("0-2 years") and `skills` (a
+            # comma-separated string, not an array) don't have a first-class
+            # column yet — stashed in `raw` so the data isn't thrown away,
+            # available for the dispatch endpoint or a future filter to use
+            # without needing a schema change today.
+            experience_requirements = job_node.get("experienceRequirements")
+            if experience_requirements:
+                posting.raw["experience_requirements"] = experience_requirements
+            skills_text = job_node.get("skills")
+            if skills_text:
+                posting.raw["skills"] = [s.strip() for s in skills_text.split(",") if s.strip()]
         except Exception:
             logger.warning("Could not fetch Talentd job detail for %s", posting.source_url)
 

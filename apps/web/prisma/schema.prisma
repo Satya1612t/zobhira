@@ -40,13 +40,27 @@ model Job {
   lastScrapedAt    DateTime  @default(now()) @map("last_scraped_at")
   isActive         Boolean   @default(true) @map("is_active")
   extractionMethod String    @default("deterministic") @map("extraction_method")
+  // Structured on Himalayas postings (see db/migrations/0017); other
+  // sources leave these null rather than guessing from free text.
+  employmentType   String?   @map("employment_type")
+  seniority        String?
   raw              Json?
+  // Postgres-computed (GENERATED ALWAYS ... STORED, see
+  // db/migrations/0014_add_job_quality_score.sql) — never written by
+  // Prisma, purely read. Demotes thin/suspicious postings and rewards
+  // complete ones (salary/logo/deadline/tags/description length) without
+  // ever deleting anything.
+  qualityScore     Int       @default(0) @map("quality_score")
+  // Last time /api/admin/link-health verified sourceUrl was reachable —
+  // NULL means never checked. See db/migrations/0015_add_job_link_checked_at.sql.
+  linkCheckedAt    DateTime? @map("link_checked_at")
 
   @@index([source])
   @@index([location])
   @@index([postedAt])
   @@index([tags], type: Gin)
   @@index([isActive, postedAt])
+  @@index([qualityScore])
   @@map("jobs")
 }
 

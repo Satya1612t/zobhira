@@ -1,7 +1,7 @@
 import logging
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -12,8 +12,16 @@ from pydantic import BaseModel
 
 import contest_scheduler
 import scheduler
-from db.repository import connect, get_job, update_job_formatting, upsert_job
-from scripts.run_scrape import SCRAPERS, has_mandatory_fields
+from db.repository import connect, flag_if_repost, get_job, update_job_formatting, upsert_job
+from scripts.run_scrape import (
+    REPOST_THRESHOLD,
+    REPOST_WINDOW_DAYS,
+    SCRAPERS,
+    flag_staffing_agency,
+    has_mandatory_fields,
+    is_india_or_remote,
+    passes_content_quality,
+)
 from utils.job_formatter import format_job_description
 from utils.logo_lookup import find_logo_url
 
@@ -52,7 +60,7 @@ def _start_background_scheduler() -> None:
     bg.add_job(scheduler.reap_expired_jobs, "interval", hours=scheduler.REAP_EVERY_HOURS, next_run_time=None)
     bg.start()
     logger.info(
-        "Background scheduler started: linkedin daily, talentd+remoteok every 2 "
+        "Background scheduler started: linkedin daily, talentd every 2 "
         "days, ycombinator every 3 days, all at %02d:%02d local",
         scheduler.RUN_AT.hour, scheduler.RUN_AT.minute,
     )
@@ -122,11 +130,12 @@ def trigger_recent_searches_sweep():
     return {"started": True}
 
 # LinkedIn is listed first since it's usually the biggest contributor of
-# results. Naukri and Indeed were both removed entirely (scrapers, config,
-# and historical DB rows) — Naukri was confirmed blocked at the
-# bot-detection level, and Indeed's mandatory-description rule left it with
-# ~1 usable posting per query (see README Notes for both).
-LIVE_SEARCH_SOURCES = ["linkedin", "ycombinator", "remoteok", "talentd"]
+# results. Naukri, Indeed, and RemoteOK were all removed entirely (scrapers,
+# config, and historical DB rows) — Naukri was confirmed blocked at the
+# bot-detection level, Indeed's mandatory-description rule left it with ~1
+# usable posting per query, and RemoteOK gates its real application link
+# behind a mandatory account signup for most listings (see README Notes).
+LIVE_SEARCH_SOURCES = ["linkedin", "ycombinator", "talentd"]
 
 # First pass enriches only the 5 latest matching postings per source (fast);
 # scrolling to the bottom of the results fetches 5 more per source that
@@ -160,15 +169,24 @@ def _upsert_all(postings: list) -> None:
     enrichment: those postings simply don't land until enrichment succeeds,
     or never land if it doesn't — same strict rule, not a separate one."""
     postings = [p for p in postings if has_mandatory_fields(p)]
+    postings = [p for p in postings if is_india_or_remote(p)]
+    postings = [p for p in postings if passes_content_quality(p)]
     if not postings:
         return
     for posting in postings:
-        if not posting.logo_url:
-            posting.logo_url = find_logo_url(posting.company)
+        flag_staffing_agency(posting)
     conn = connect()
+    repost_cutoff = datetime.now(timezone.utc) - timedelta(days=REPOST_WINDOW_DAYS)
     try:
+        # Connection passed through so already-resolved companies hit the
+        # persisted cache instead of re-querying Clearbit (see
+        # utils/logo_lookup.py).
         for posting in postings:
-            upsert_job(conn, posting)
+            if not posting.logo_url:
+                posting.logo_url = find_logo_url(posting.company, conn)
+        for posting in postings:
+            if upsert_job(conn, posting) and posting.source == "linkedin":
+                flag_if_repost(conn, posting, repost_cutoff, REPOST_THRESHOLD)
         conn.commit()  # one commit for the whole batch, not one per posting
     finally:
         conn.close()

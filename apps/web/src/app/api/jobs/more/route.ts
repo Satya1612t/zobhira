@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { buildJobsWhere, JOB_SELECT, type SearchParams } from "@/lib/jobQuery";
+import { buildJobsWhere, jobOrderBy, JOB_SELECT, type SearchParams } from "@/lib/jobQuery";
 
 const PAGE_SIZE = 50;
 
@@ -32,10 +32,7 @@ export async function POST(request: NextRequest) {
   const liveWhere = liveWindowHours
     ? { postedAt: { gte: new Date(Date.now() - liveWindowHours * 60 * 60 * 1000) } }
     : {};
-  const orderBy = [
-    { postedAt: filters.sort === "oldest" ? ("asc" as const) : ("desc" as const) },
-    { id: "desc" as const },
-  ];
+  const orderBy = jobOrderBy(filters.sort);
 
   if (mode === "filtered") {
     const { where } = await buildJobsWhere(filters, liveWhere);

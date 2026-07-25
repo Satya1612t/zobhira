@@ -15,7 +15,7 @@ type AdminJob = {
   deadlineAt: string | null;
 };
 
-const SOURCES = ["", "linkedin", "talentd", "remoteok", "ycombinator"];
+const SOURCES = ["", "linkedin", "talentd", "ycombinator", "himalayas"];
 
 export function AdminJobsTable() {
   const { showToast } = useToast();

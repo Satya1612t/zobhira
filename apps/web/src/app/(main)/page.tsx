@@ -3,7 +3,7 @@ import { JobCard } from "@/components/JobCard";
 import { JobGridCard } from "@/components/JobGridCard";
 import { ContestCard } from "@/components/ContestCard";
 import { HomeSignupCta } from "@/components/HomeSignupCta";
-import { JOB_SELECT } from "@/lib/jobQuery";
+import { JOB_SELECT, jobOrderBy } from "@/lib/jobQuery";
 import { CONTEST_SELECT, CONTEST_ORDER_BY } from "@/lib/contestQuery";
 
 export const dynamic = "force-dynamic";
@@ -16,12 +16,12 @@ export default async function HomePage() {
       prisma.job.groupBy({ by: ["company"], where: { isActive: true } }),
       prisma.job.findFirst({
         where: { isActive: true },
-        orderBy: [{ postedAt: "desc" }, { id: "desc" }],
+        orderBy: jobOrderBy(),
         select: JOB_SELECT,
       }),
       prisma.job.findMany({
         where: { isActive: true },
-        orderBy: [{ postedAt: "desc" }, { id: "desc" }],
+        orderBy: jobOrderBy(),
         take: 8,
         select: JOB_SELECT,
       }),

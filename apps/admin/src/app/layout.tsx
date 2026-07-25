@@ -7,8 +7,8 @@ import { ToastProvider } from "@/components/Toast";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Job Portal Admin",
-  description: "Admin panel for the Job Portal — jobs, contests, scheduler, sources",
+  title: "Zobhira Admin",
+  description: "Admin panel for Zobhira — jobs, contests, scheduler, sources",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

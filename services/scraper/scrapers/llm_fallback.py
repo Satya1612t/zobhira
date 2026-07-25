@@ -80,8 +80,8 @@ def _freellmapi_graph_config() -> dict | None:
     }
 
 
-# Every caller (remoteok.py/talentd.py/linkedin.py/ycombinator.py's
-# `_scrape_with_llm`) asks for "title, company, ... URL" in free-form
+# Every caller (talentd.py/linkedin.py/ycombinator.py's `_scrape_with_llm`)
+# asks for "title, company, ... URL" in free-form
 # English and then reads `result.get("jobs", [])` — live-confirmed the
 # router-selected model can find the right data (verified against a real
 # page: correct titles/companies/salaries/URLs) but still answer in plain

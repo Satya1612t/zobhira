@@ -12,6 +12,13 @@ type Filters = {
   postedWithin?: string;
   sort?: string;
   experienceLevel?: string;
+  company?: string;
+  tags?: string;
+  employmentType?: string;
+  source?: string | string[];
+  hasSalary?: string;
+  salaryMin?: string;
+  hideIncomplete?: string;
 };
 
 // Fetched pages arrive as plain JSON, so Date fields land as ISO strings —
@@ -61,7 +68,18 @@ export function JobFeed({
   }, [jobs]);
 
   const hasActiveFilters = Boolean(
-    filters.q || filters.location || filters.workplaceType || filters.postedWithin || filters.experienceLevel
+    filters.q ||
+      filters.location ||
+      filters.workplaceType ||
+      filters.postedWithin ||
+      filters.experienceLevel ||
+      filters.company ||
+      filters.tags ||
+      filters.employmentType ||
+      (Array.isArray(filters.source) ? filters.source.length : filters.source) ||
+      filters.hasSalary === "true" ||
+      filters.salaryMin ||
+      filters.hideIncomplete === "true"
   );
 
   const loadMore = useCallback(async () => {

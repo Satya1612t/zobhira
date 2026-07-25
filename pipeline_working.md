@@ -22,11 +22,11 @@ After scraping, `scripts/run_scrape.py::run_source()` does the same steps for ev
 - About 1 in 5 enriched jobs still comes back with no usable description (dead/expired listing) — those get dropped by the mandatory-field rule.
 - Scraped daily, plus a smaller supplementary sweep 3x/week that re-runs whatever people actually searched for on the site.
 
-## RemoteOK, Talentd, YCombinator (lower-volume sources)
-- None of these have a real server-side search — they each just load one fixed page/API response and filter client-side by matching the query against the title. So looping many different search terms against them is pointless; they're swept once per run with no query filter, and the tag-classification step recovers per-role labeling afterward.
-- RemoteOK is the cleanest: it's a public JSON API, so the list pass gets everything (description, tags, date) in one shot with no per-job page visits — its "enrich" step is a no-op.
-- Talentd and YCombinator need the detail-page enrich pass like LinkedIn does, since their list view alone doesn't have full descriptions.
+## Talentd, YCombinator (lower-volume sources)
+- Neither has a real server-side search — they each just load one fixed page/API response and filter client-side by matching the query against the title. So looping many different search terms against them is pointless; they're swept once per run with no query filter, and the tag-classification step recovers per-role labeling afterward.
+- Both need the detail-page enrich pass like LinkedIn does, since their list view alone doesn't have full descriptions.
 - Scraped every 2–3 days rather than daily, since they're low-volume niche boards with little new content day to day.
+- RemoteOK was removed entirely — its real application link is gated behind a mandatory account signup for most listings (confirmed live by decoding its obfuscated "apply" redirect all the way through to a `/sign-up` wall).
 
 ## What happens when a deterministic scraper fails
 If a source's expected page structure breaks, each scraper can fall back to an LLM-driven extraction pass instead (via FreeLLMAPI first, then direct Gemini/Anthropic/OpenAI as backup) — same mandatory-field rule applies afterward regardless of which path produced the data.

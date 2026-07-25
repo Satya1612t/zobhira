@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # title/link to begin with.
 BASE_FIELDS = ("title", "platform", "source_url")
 
-# Strict guardrail, same spirit as jobs' 5-field rule
+# Strict guardrail, same spirit as jobs' 4-field rule
 # (scripts/run_scrape.py::has_mandatory_fields): a posting missing any of
 # these can't be shown/registered for meaningfully, so it's discarded
 # rather than stored. Checked AFTER the LLM gap-fill pass below, since for
