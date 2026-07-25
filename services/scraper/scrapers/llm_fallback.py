@@ -12,10 +12,30 @@ than attempted. Only raises once every configured provider has failed, so
 a single account/service issue no longer takes the LLM fallback path down
 entirely."""
 
+import concurrent.futures
 import logging
 import os
 
 logger = logging.getLogger(__name__)
+
+# scrapegraphai's page loader calls `asyncio.run(...)` internally to drive
+# its own Playwright fetch. That collides when this fallback fires from
+# inside a deterministic scraper's sync Playwright session — scheduler.py's
+# `_sweep()` keeps one Playwright browser open (via `sync_playwright()`,
+# see utils/browser.py's `get_browser`) across a whole source's multi-query
+# loop, and Playwright's *sync* API secretly registers a "running" event
+# loop on whatever OS thread it's used from to bridge its sync interface to
+# its real async implementation. Any `asyncio.run()` called later on that
+# same thread — even one with nothing to do with Playwright — then hits
+# `RuntimeError: asyncio.run() cannot be called from a running event loop`.
+# Live-confirmed: every provider failed with this identical error whenever
+# the fallback triggered mid-sweep. Running `graph.run()` in a brand-new OS
+# thread (a one-shot executor) gives it a thread with no Playwright-tainted
+# asyncio state at all, sidestepping the collision — verified this fixes it
+# without the collision reappearing.
+def _run_isolated(fn, *args, **kwargs):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        return executor.submit(fn, *args, **kwargs).result()
 
 # scrapegraphai's page loader (ChromiumLoader) defaults to
 # `wait_until="domcontentloaded"` with no extra wait — fine for static
@@ -117,7 +137,7 @@ def run_smart_scraper(prompt: str, source: str) -> dict:
         tried_any = True
         try:
             graph = SmartScraperGraph(prompt=prompt, source=source, config=freellmapi_config)
-            result = graph.run()
+            result = _run_isolated(graph.run)
             logger.info("LLM extraction succeeded via provider=freellmapi")
             return result
         except Exception as exc:
@@ -139,7 +159,7 @@ def run_smart_scraper(prompt: str, source: str) -> dict:
         }
         try:
             graph = SmartScraperGraph(prompt=prompt, source=source, config=graph_config)
-            result = graph.run()
+            result = _run_isolated(graph.run)
             logger.info("LLM extraction succeeded via provider=%s", provider)
             return result
         except Exception as exc:
