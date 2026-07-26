@@ -1,10 +1,11 @@
-# Job Portal
+# Job Portal (Zobhira)
 
 A searchable job board aggregating technical roles from LinkedIn, Y Combinator / Work at
-a Startup, and Talentd — plus a companion contest/hackathon aggregator sourced
+a Startup, Talentd, and Himalayas — plus a companion contest/hackathon aggregator sourced
 from public RSS/JSON feeds (DEV Community). Both are kept fresh by background scrapers
 and enriched with an optional, self-hostable LLM pass for cleaner descriptions and
-highlighted facts.
+highlighted facts. The product is branded **Zobhira**; no third-party/scraper source names
+are ever surfaced in the UI (see [Notes](#notes)).
 
 ## Structure
 - `apps/web` — Next.js 14 (App Router) job/contest listing and search UI, Prisma + Postgres
@@ -40,6 +41,7 @@ highlighted facts.
    python -m scripts.run_scrape --source ycombinator --query "software engineer"
    python -m scripts.run_scrape --source talentd --query "software engineer"
    python -m scripts.run_scrape --source linkedin --query "software engineer"
+   python -m scripts.run_scrape --source himalayas --query "software engineer"
    python -m scripts.run_contest_scrape --source dev_community
    ```
 
@@ -89,6 +91,7 @@ same volume, so there's no contention risk like there is *within* a family):
 | Source | Cadence | Time |
 |---|---|---|
 | LinkedIn | Daily | 02:00 local |
+| Himalayas | Daily | 02:00 local |
 | Talentd | Every 2 days | 02:00 local |
 | YCombinator | Every 3 days | 02:00 local |
 | LinkedIn (recent user searches) | 3x/week (Mon/Wed/Fri) | 1h after the daily LinkedIn sweep finishes |
@@ -204,16 +207,28 @@ live-search UI later.
 
 ## Schema
 
-3 Prisma models (`apps/web/prisma/schema.prisma`), backed by 10 plain SQL migrations in
-`db/migrations/`:
+5 Prisma models (`apps/web/prisma/schema.prisma`, mirrored in `apps/admin/prisma/schema.prisma`),
+backed by 17 plain SQL migrations in `db/migrations/`:
 - **`Job`** — title/company/location/workplaceType/salary/source/description/
-  formattedDescription/highlights/tags/postedAt/deadlineAt/logoUrl, indexed on
-  `source`, `location`, `postedAt`, `tags` (GIN), and `(isActive, postedAt)`.
+  formattedDescription/highlights/tags/postedAt/deadlineAt/logoUrl/qualityScore/linkCheckedAt,
+  indexed on `source`, `location`, `postedAt`, `tags` (GIN), and `(isActive, postedAt)`.
 - **`Contest`** — title/platform/organizer/mode/prizeAmount/prizeCurrency/prizeSummary/
   source/description/summary/highlights/tags/startsAt/deadlineAt/logoUrl, indexed on
   `source`, `deadlineAt`, `tags` (GIN), and `(isActive, deadlineAt)`.
 - **`SearchQuery`** — tracks every distinct search so `StreamsPanel` can surface recent
   searches as quick-access links; also feeds the scheduler's recent-searches LinkedIn sweep.
+- **`ScraperSource`** — per-source enable/disable + metadata, managed from `apps/admin`.
+- **`DispatchLog`** — `(contentType, contentId, platform)`-unique tracking of what's already been
+  posted to an external channel (see "Dispatch API" below); retry-safe on `postedAt IS NULL`.
+
+## Dispatch API (jobs/contests → external channels, e.g. Telegram)
+
+`apps/web`'s `/api/dispatch/pending` and `/api/dispatch/mark-posted` routes let an external
+automation (an n8n workflow, see `n8n/`) poll for not-yet-posted jobs/contests and mark them
+posted, without apps/web needing to know anything about the destination platform. Gated by a
+shared secret (`DISPATCH_API_KEY` env var, checked via `X-Dispatch-Key` header,
+`apps/web/src/lib/dispatchAuth.ts`) — fails closed if the env var is unset. Not called by any
+page in the app itself.
 
 ## Deployment
 
@@ -238,6 +253,11 @@ only) is untouched and still used for local dev as described above.
     description to fetch).
   - **DEV Community** (contests): no structured deadline/prize/mode at all — these are
     gap-filled from the post's own prose via the LLM pass described above when present.
+  - **Himalayas**: logo + full description from each job's detail page, similar shape to
+    LinkedIn's enrichment pass.
+- **No third-party/scraper branding is ever shown in the UI** — `job.source`/`contest.platform`
+  exist purely as DB/filter fields. There's no "via LinkedIn" badge, no platform-name filter
+  pills, no named-source copy on About/Privacy. Keep this invariant when adding new UI.
 - **Naukri, Indeed, and RemoteOK were removed entirely** (scrapers, config, historical
   rows). Naukri was confirmed blocked at the bot-detection level (Akamai/bot-manager-level
   403/406 + reCAPTCHA on both the site and its internal API, even with a realistic
