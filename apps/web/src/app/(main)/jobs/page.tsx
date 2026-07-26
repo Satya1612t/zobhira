@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { JobFeed } from "@/components/JobFeed";
-import { SearchBar } from "@/components/SearchBar";
+import { JobsFilterLayout } from "@/components/JobsFilterLayout";
 import { StreamsPanel } from "@/components/StreamsPanel";
 import {
   buildJobsWhere,
@@ -51,7 +51,7 @@ export default async function JobsPage({
   const suggestion = q && filteredJobs.length === 0 ? await suggestCorrection(q) : null;
 
   return (
-    <main style={{ maxWidth: 1040, margin: "0 auto", padding: "22px 10px 40px" }}>
+    <main style={{ maxWidth: 1280, margin: "0 auto", padding: "22px 24px 40px" }}>
       <h1
         style={{
           fontFamily: "var(--font-display)",
@@ -64,8 +64,7 @@ export default async function JobsPage({
         {q ? `“${q}”` : "Latest technical roles"}
       </h1>
       <p style={{ color: "var(--ink-muted)", marginTop: 5, marginBottom: 16, fontSize: 13.5 }}>
-        {jobs.length} listing{jobs.length === 1 ? "" : "s"} aggregated from LinkedIn, Y
-        Combinator &amp; Talentd
+        Fresh technical roles, updated daily
         {isDefaultIndiaScope && (
           <span style={{ color: "var(--ink-faint)" }}>
             {" "}
@@ -74,7 +73,7 @@ export default async function JobsPage({
           </span>
         )}
       </p>
-      <SearchBar
+      <JobsFilterLayout
         q={q}
         location={location}
         workplaceType={workplaceType}
@@ -84,56 +83,49 @@ export default async function JobsPage({
         company={company}
         tags={tags}
         employmentType={employmentType}
-        source={source}
         hasSalary={hasSalary}
         salaryMin={salaryMin}
-        hideIncomplete={hideIncomplete}
         action="/jobs"
-      />
-      <div className="jobs-layout">
-        <div>
-          {jobs.length === 0 ? (
-            <p
-              style={{
-                color: "var(--ink-muted)",
-                background: "var(--surface)",
-                border: "1px solid var(--line)",
-                borderRadius: "var(--radius)",
-                padding: 20,
-              }}
-            >
-              No jobs found in the database yet for this search. Try different keywords/filters,
-              or check back after the next scheduled scrape.
-              {suggestion && (
-                <>
-                  {" "}
-                  Did you mean{" "}
-                  <a
-                    href={`/jobs?q=${encodeURIComponent(suggestion)}`}
-                    style={{ color: "var(--accent)", fontWeight: 600 }}
-                  >
-                    {suggestion}
-                  </a>
-                  ?
-                </>
-              )}
-            </p>
-          ) : (
-            <JobFeed
-              key={`${q ?? ""}|${location ?? ""}|${workplaceType ?? ""}|${postedWithin ?? ""}|${sort ?? ""}|${experienceLevel ?? ""}|${company ?? ""}|${tags ?? ""}|${employmentType ?? ""}|${JSON.stringify(source ?? "")}|${hasSalary ?? ""}|${salaryMin ?? ""}|${hideIncomplete ?? ""}`}
-              initialJobs={jobs}
-              initialMode={initialMode}
-              filters={{
-                q, location, workplaceType, postedWithin, sort, experienceLevel,
-                company, tags, employmentType, source, hasSalary, salaryMin, hideIncomplete,
-              }}
-            />
-          )}
-        </div>
-        <div className="jobs-streams-panel">
-          <StreamsPanel activeQuery={q} recentSearches={recentSearches} basePath="/jobs" />
-        </div>
-      </div>
+        streamsPanel={<StreamsPanel activeQuery={q} recentSearches={recentSearches} basePath="/jobs" compact />}
+      >
+        {jobs.length === 0 ? (
+          <p
+            style={{
+              color: "var(--ink-muted)",
+              background: "var(--surface)",
+              border: "1px solid var(--line)",
+              borderRadius: "var(--radius)",
+              padding: 20,
+            }}
+          >
+            No jobs found in the database yet for this search. Try different keywords/filters,
+            or check back after the next scheduled scrape.
+            {suggestion && (
+              <>
+                {" "}
+                Did you mean{" "}
+                <a
+                  href={`/jobs?q=${encodeURIComponent(suggestion)}`}
+                  style={{ color: "var(--accent)", fontWeight: 600 }}
+                >
+                  {suggestion}
+                </a>
+                ?
+              </>
+            )}
+          </p>
+        ) : (
+          <JobFeed
+            key={`${q ?? ""}|${location ?? ""}|${workplaceType ?? ""}|${postedWithin ?? ""}|${sort ?? ""}|${experienceLevel ?? ""}|${company ?? ""}|${tags ?? ""}|${employmentType ?? ""}|${JSON.stringify(source ?? "")}|${hasSalary ?? ""}|${salaryMin ?? ""}|${hideIncomplete ?? ""}`}
+            initialJobs={jobs}
+            initialMode={initialMode}
+            filters={{
+              q, location, workplaceType, postedWithin, sort, experienceLevel,
+              company, tags, employmentType, source, hasSalary, salaryMin, hideIncomplete,
+            }}
+          />
+        )}
+      </JobsFilterLayout>
     </main>
   );
 }

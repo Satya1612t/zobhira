@@ -20,9 +20,8 @@ export default function PrivacyPage() {
           attached to a search.
         </p>
         <p>
-          Job listing data itself is scraped from public job boards (Y Combinator / Work at a
-          Startup, Talentd, LinkedIn, Himalayas) on a schedule and stored to power search —
-          see the About page for details.
+          Job listing data itself is aggregated from public job boards and hiring platforms on
+          a schedule and stored to power search — see the About page for details.
         </p>
         <p style={{ color: "var(--ink-faint)", fontSize: 13 }}>
           This is a placeholder policy reflecting the app's current, actual behavior — update it

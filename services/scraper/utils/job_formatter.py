@@ -15,19 +15,96 @@ def _strip_code_fence(text: str) -> str:
     return _CODE_FENCE_RE.sub("", text).strip()
 
 
+# Some sources (Himalayas in particular — live-confirmed on a real GDIT
+# posting) embed a form's worth of HR/legal field labels with nothing
+# actually filled in ("Clearance Level Must Currently Possess:", "Travel
+# Required:", etc.) — an artifact of their own site's HTML structure (an
+# empty <dd>/value slot next to a label), not real content. A line is
+# treated as an empty label only when the NEXT non-blank line is also a
+# bare "Label:" line (i.e. this one's value was blank) or it's the very
+# last line — a label immediately followed by real prose is left alone,
+# since that's a legitimate (if slightly redundant) section header, not
+# noise. Deterministic and dependency-free: runs unconditionally, so the
+# page has at least this baseline cleanup even when every LLM provider is
+# unavailable — matches this session's LLM-billing situation, where the
+# richer structuring pass below often can't run at all.
+_LABEL_LINE_RE = re.compile(r"^[A-Z][A-Za-z0-9 /&()\-]{1,70}:$")
+
+
+def strip_empty_label_lines(text: str) -> str:
+    non_empty = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    keep = [True] * len(non_empty)
+    for i, line in enumerate(non_empty):
+        if not _LABEL_LINE_RE.match(line):
+            continue
+        nxt = non_empty[i + 1] if i + 1 < len(non_empty) else None
+        if nxt is None or _LABEL_LINE_RE.match(nxt):
+            keep[i] = False
+    return "\n\n".join(ln for ln, k in zip(non_empty, keep) if k)
+
+
+# Scraped "Show more"/"Show less"/"See more"/"See less" text is the
+# source site's own expand/collapse UI control label bleeding into the
+# description content, not real content or a real link — utils/text.py's
+# strip_trailing_toggle() already handled this, but only as a single
+# trailing suffix on LinkedIn specifically. This is broader: every
+# source, and every occurrence (a standalone line, or attached to the end
+# of a real sentence), not just the very end of the whole text. Live-
+# verified against both shapes before wiring in.
+_UI_TOGGLE_WHOLE_LINE_RE = re.compile(r"(?i)^(show more|show less|see more|see less)\.?$")
+_UI_TOGGLE_TRAILING_RE = re.compile(r"(?i)\s*(show more|show less|see more|see less)\.?\s*$")
+
+
+def strip_ui_toggle_text(text: str) -> str:
+    lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            lines.append(line)
+            continue
+        if _UI_TOGGLE_WHOLE_LINE_RE.match(stripped):
+            continue  # the whole line was just toggle chrome — drop it
+        lines.append(_UI_TOGGLE_TRAILING_RE.sub("", line))
+    return "\n".join(lines)
+
+
+# Structured shape (replaces the old plain-prose "formatted_description"
+# string) — stored JSON-encoded in the same TEXT column, no migration
+# needed. Every list is best-effort: a bullet that doesn't clearly belong
+# to responsibilities/requirements/niceToHave/benefits goes into "details"
+# rather than being forced into the wrong bucket or dropped, since most
+# real postings don't cleanly separate into these categories themselves.
+_JSON_SHAPE_HINT = (
+    '{"overview": "1-2 paragraph summary or null", '
+    '"responsibilities": ["...", ...], "requirements": ["...", ...], '
+    '"niceToHave": ["...", ...], "benefits": ["...", ...], '
+    '"details": ["...", ...], "highlights": ["...", ...]}'
+)
+
+
 def format_job_description(description: str | None) -> dict:
-    """Reformats a raw scraped job description into clean, well-structured
-    text — PRESERVES all original content (never summarized/shortened,
-    only restructured for readability) — plus up to 6 short highlight
-    facts (salary/compensation, required experience, key benefits, notable
-    requirements) pulled out of the text, only when actually present.
-    Best-effort only: returns `{"formatted_description": None,
-    "highlights": []}` if there's nothing to format or every LLM provider
-    fails — this is called on-demand (one job at a time, on first detail-
-    page view), not in a batch pipeline, so a failure here must never
-    break the page, just leave it showing the raw description."""
+    """Restructures a raw scraped job description into distinct sections
+    (overview / responsibilities / requirements / nice-to-have / benefits /
+    details) plus up to 6 short highlight facts — PRESERVES all original
+    substantive content (never summarized/shortened, only categorized),
+    only omitting boilerplate label lines that had nothing actually filled
+    in. Best-effort only: falls back to `{"formatted_description":
+    <deterministically cleaned text>, "highlights": []}` if there's
+    nothing to format or every LLM provider fails — this is called
+    on-demand (one job at a time, on first detail-page view), not in a
+    batch pipeline, so a failure here must never break the page, and the
+    deterministic cleanup alone is still a real improvement over showing
+    the fully raw description."""
     empty = {"formatted_description": None, "highlights": []}
     if not description or not description.strip():
+        return empty
+
+    cleaned = strip_ui_toggle_text(strip_empty_label_lines(description))
+    # Fallback if every LLM provider fails below — plain cleaned text,
+    # same shape FormattedJobDescription.tsx already renders as prose for
+    # any pre-existing (old-format) formatted_description row.
+    fallback = {"formatted_description": cleaned or None, "highlights": []}
+    if not cleaned:
         return empty
 
     # Lazy import, not module-top — llm_fallback.py reads
@@ -38,41 +115,57 @@ def format_job_description(description: str | None) -> dict:
     from scrapers.llm_fallback import run_text_completion
 
     prompt = (
-        "Reformat this job description into clean, well-structured text — "
-        "proper paragraphs and bullet points where the content calls for "
-        "it. Preserve ALL of the original information; do not summarize, "
-        "shorten, or omit anything. Plain text only — no markdown syntax "
-        "like ** or # or *, since this renders as plain text, not "
-        "markdown; use a plain dash (-) for bullets and blank lines "
-        "between paragraphs/sections instead. Then separately list up to "
-        "6 short highlight facts if clearly present: salary/compensation, "
-        "required experience level, key benefits, notable requirements. "
-        "Skip anything not actually stated — do not invent or guess.\n\n"
-        f"DESCRIPTION:\n{description}\n\n"
-        'Respond with ONLY valid JSON: {"formatted_description": "...", "highlights": ["...", ...]}.'
+        "Restructure this job description into distinct sections. Preserve "
+        "ALL of the original substantive information; do not summarize, "
+        "shorten, or omit anything real — only reorganize it. Sort each "
+        "point into whichever of these it best matches: responsibilities "
+        "(what the person will do), requirements (must-have "
+        "qualifications), niceToHave (preferred/bonus qualifications), "
+        "benefits (perks/compensation extras, not salary itself). If a "
+        "point doesn't clearly belong to any of those, put it in "
+        "'details' instead of forcing it into the wrong category or "
+        "dropping it. 'overview' is a short 1-2 paragraph summary of the "
+        "role itself (null if the source has no real overview prose). "
+        "Then separately list up to 6 short highlight facts if clearly "
+        "present: salary/compensation, required experience level, a key "
+        "benefit, a notable requirement. Skip anything not actually "
+        "stated — do not invent or guess. Leave any section empty ([]) "
+        "if the source has nothing for it.\n\n"
+        f"DESCRIPTION:\n{cleaned}\n\n"
+        f"Respond with ONLY valid JSON in exactly this shape: {_JSON_SHAPE_HINT}"
     )
 
     raw = run_text_completion(prompt)
     if not raw:
-        return empty
+        return fallback
 
     try:
         data = json.loads(_strip_code_fence(raw))
     except json.JSONDecodeError:
         logger.warning("Could not parse job formatting JSON: %r", raw[:200])
-        return empty
+        return fallback
     if not isinstance(data, dict):
-        return empty
+        return fallback
 
-    highlights = data.get("highlights", [])
-    if not isinstance(highlights, list):
-        highlights = []
+    def _str_list(key: str) -> list[str]:
+        value = data.get(key)
+        return [str(v) for v in value] if isinstance(value, list) else []
 
-    formatted = data.get("formatted_description")
-    if not isinstance(formatted, str) or not formatted.strip():
-        formatted = None
-
-    return {
-        "formatted_description": formatted,
-        "highlights": [str(h) for h in highlights[:6]],
+    overview = data.get("overview")
+    structured = {
+        "overview": overview if isinstance(overview, str) and overview.strip() else None,
+        "responsibilities": _str_list("responsibilities"),
+        "requirements": _str_list("requirements"),
+        "niceToHave": _str_list("niceToHave"),
+        "benefits": _str_list("benefits"),
+        "details": _str_list("details"),
     }
+    # Every section empty and no overview — the model returned nothing
+    # useful, same as an LLM failure from the caller's point of view.
+    if not structured["overview"] and not any(
+        structured[k] for k in ("responsibilities", "requirements", "niceToHave", "benefits", "details")
+    ):
+        return fallback
+
+    highlights = _str_list("highlights")[:6]
+    return {"formatted_description": json.dumps(structured), "highlights": highlights}

@@ -19,6 +19,14 @@ function formatSalary(job: {
   return `${currency} ${min ?? max}`;
 }
 
+// Every card gets the same total height regardless of how much optional
+// content a given job actually has (tags, salary, deadline) — each row
+// below reserves its own fixed height and clips overflow rather than
+// growing/shrinking the card, so a dense listing page reads as a uniform
+// grid instead of a ragged one.
+const TAGS_ROW_HEIGHT = 26;
+const META_ROW_HEIGHT = 20;
+
 export function JobCard({ job }: { job: JobListItem }) {
   const salary = formatSalary(job);
   const topTechnologies = extractTechnologies(job.description, 3);
@@ -47,21 +55,33 @@ export function JobCard({ job }: { job: JobListItem }) {
             <div className="card-title" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {job.title}
             </div>
-            <div style={{ color: "var(--ink-muted)", marginTop: 4, fontSize: 13.5 }}>{job.company}</div>
+            <div
+              style={{
+                color: "var(--ink-muted)",
+                marginTop: 4,
+                fontSize: 13.5,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {job.company}
+            </div>
           </div>
         </div>
 
-        {topTechnologies.length > 0 && (
-          <div style={{ marginTop: 12, display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {topTechnologies.map((tech) => (
-              <span key={tech} className="tag tag-outline">
-                {tech}
-              </span>
-            ))}
-          </div>
-        )}
+        <div style={{ marginTop: 12, height: TAGS_ROW_HEIGHT, overflow: "hidden", display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {topTechnologies.map((tech) => (
+            <span key={tech} className="tag tag-outline">
+              {tech}
+            </span>
+          ))}
+        </div>
 
-        <div className="card-meta" style={{ marginTop: 14, flexWrap: "wrap" }}>
+        <div
+          className="card-meta"
+          style={{ marginTop: 14, height: META_ROW_HEIGHT, overflow: "hidden", flexWrap: "wrap" }}
+        >
           <span>{job.location ?? "Location unknown"}</span>
           {job.workplaceType !== "unknown" && <span>· {job.workplaceType}</span>}
           {salary && <span>· {salary}</span>}
@@ -71,27 +91,6 @@ export function JobCard({ job }: { job: JobListItem }) {
           )}
         </div>
       </Link>
-
-      {/* Himalayas' terms require a visible attribution link back to
-          himalayas.app on any listing sourced from them. */}
-      {job.source === "himalayas" && (
-        <a
-          href={job.sourceUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            display: "inline-block",
-            marginTop: 10,
-            fontSize: 12,
-            fontWeight: 600,
-            color: "var(--ink-faint)",
-            textDecoration: "none",
-          }}
-        >
-          via Himalayas ↗
-        </a>
-      )}
     </div>
   );
 }

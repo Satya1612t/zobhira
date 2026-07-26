@@ -3,6 +3,77 @@
 import { useEffect, useState } from "react";
 import { linkifyText } from "@/lib/linkify";
 
+type StructuredDescription = {
+  overview: string | null;
+  responsibilities: string[];
+  requirements: string[];
+  niceToHave: string[];
+  benefits: string[];
+  details: string[];
+};
+
+const SECTION_LABELS: Record<keyof Omit<StructuredDescription, "overview">, string> = {
+  responsibilities: "Responsibilities",
+  requirements: "Requirements",
+  niceToHave: "Nice to have",
+  benefits: "Benefits",
+  details: "Additional details",
+};
+
+// `formatted_description` holds either the new structured JSON (see
+// services/scraper/utils/job_formatter.py) or, for rows formatted before
+// that change (or when every LLM provider failed and only the
+// deterministic empty-label cleanup ran), plain reformatted text — both
+// are valid, real cached states, not an error condition, so this has to
+// handle both rather than assuming the newer shape everywhere.
+function parseStructured(formatted: string): StructuredDescription | null {
+  let data: unknown;
+  try {
+    data = JSON.parse(formatted);
+  } catch {
+    return null;
+  }
+  if (!data || typeof data !== "object") return null;
+  const d = data as Record<string, unknown>;
+  const isStrArray = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
+  if (
+    !("overview" in d) &&
+    !isStrArray(d.responsibilities) &&
+    !isStrArray(d.requirements) &&
+    !isStrArray(d.niceToHave) &&
+    !isStrArray(d.benefits) &&
+    !isStrArray(d.details)
+  ) {
+    return null;
+  }
+  return {
+    overview: typeof d.overview === "string" ? d.overview : null,
+    responsibilities: isStrArray(d.responsibilities) ? d.responsibilities : [],
+    requirements: isStrArray(d.requirements) ? d.requirements : [],
+    niceToHave: isStrArray(d.niceToHave) ? d.niceToHave : [],
+    benefits: isStrArray(d.benefits) ? d.benefits : [],
+    details: isStrArray(d.details) ? d.details : [],
+  };
+}
+
+function BulletSection({ title, items }: { title: string; items: string[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div style={{ marginTop: 20 }}>
+      <h3 style={{ margin: "0 0 10px", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 15, color: "var(--ink)" }}>
+        {title}
+      </h3>
+      <ul style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 6 }}>
+        {items.map((item, i) => (
+          <li key={i} style={{ color: "var(--ink)", fontSize: 14.5, lineHeight: 1.6 }}>
+            {linkifyText(item)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function FormattedJobDescription({
   jobId,
   description,
@@ -16,15 +87,15 @@ export function FormattedJobDescription({
 }) {
   const [formatted, setFormatted] = useState(formattedDescription);
   const [highlights, setHighlights] = useState(initialHighlights);
-  const [loading, setLoading] = useState(false);
 
   // Already cached (a previous viewer triggered the LLM call) — render
   // instantly, no fetch needed. Only the first-ever viewer of a job pays
   // the ~30-90s LLM latency; every viewer after that gets this for free.
+  // No loading indicator shown for this — it just swaps in silently
+  // whenever it resolves, same as it would on a page refresh.
   useEffect(() => {
     if (formatted || !description) return;
     let cancelled = false;
-    setLoading(true);
     fetch(`/api/jobs/${jobId}/format-description`, { method: "POST" })
       .then((res) => res.json())
       .then((data: { formatted_description?: string; highlights?: string[] }) => {
@@ -35,9 +106,6 @@ export function FormattedJobDescription({
       .catch(() => {
         // Silently keep showing the raw description — never block or
         // error out the page over a best-effort enhancement.
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -61,29 +129,10 @@ export function FormattedJobDescription({
     );
   }
 
+  const structured = formatted ? parseStructured(formatted) : null;
+
   return (
     <div style={{ marginTop: 26, paddingTop: 22, borderTop: "1px solid var(--line)" }}>
-      {loading && (
-        <div
-          className="skeleton-shimmer"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: 12,
-            fontWeight: 600,
-            padding: "5px 12px",
-            borderRadius: 999,
-            background: "linear-gradient(90deg, var(--accent-soft) 25%, var(--surface-hover) 37%, var(--accent-soft) 63%)",
-            backgroundSize: "400% 100%",
-            color: "var(--accent)",
-            marginBottom: 16,
-          }}
-        >
-          ✨ Formatting with AI…
-        </div>
-      )}
-
       {highlights.length > 0 && (
         <div style={{ marginBottom: 18 }}>
           <div
@@ -119,17 +168,27 @@ export function FormattedJobDescription({
         </div>
       )}
 
-      <div
-        style={{
-          lineHeight: 1.7,
-          whiteSpace: "pre-wrap",
-          overflowWrap: "break-word",
-          color: "var(--ink)",
-          fontSize: 14.5,
-        }}
-      >
-        {linkifyText(formatted ?? description)}
-      </div>
+      {structured ? (
+        <div>
+          {structured.overview && (
+            <div style={{ lineHeight: 1.7, whiteSpace: "pre-wrap", overflowWrap: "break-word", color: "var(--ink)", fontSize: 14.5 }}>
+              {linkifyText(structured.overview)}
+            </div>
+          )}
+          <BulletSection title={SECTION_LABELS.responsibilities} items={structured.responsibilities} />
+          <BulletSection title={SECTION_LABELS.requirements} items={structured.requirements} />
+          <BulletSection title={SECTION_LABELS.niceToHave} items={structured.niceToHave} />
+          <BulletSection title={SECTION_LABELS.benefits} items={structured.benefits} />
+          <BulletSection title={SECTION_LABELS.details} items={structured.details} />
+        </div>
+      ) : (
+        // Plain text: either a pre-existing (old-format) cached row, or the
+        // deterministic-only fallback (empty-label lines stripped, but no
+        // LLM categorization — see job_formatter.py's `fallback` return).
+        <div style={{ lineHeight: 1.7, whiteSpace: "pre-wrap", overflowWrap: "break-word", color: "var(--ink)", fontSize: 14.5 }}>
+          {linkifyText(formatted ?? description)}
+        </div>
+      )}
     </div>
   );
 }

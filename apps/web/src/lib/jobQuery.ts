@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 // Every job list/detail query in the app uses this same select — it's every
@@ -26,6 +26,7 @@ export const JOB_SELECT = {
   deadlineAt: true,
   logoUrl: true,
   isActive: true,
+  employmentType: true,
 } satisfies Prisma.JobSelect;
 
 export type JobListItem = Prisma.JobGetPayload<{ select: typeof JOB_SELECT }>;
@@ -106,31 +107,41 @@ function indiaScopeFilter(): Prisma.JobWhereInput {
   };
 }
 
-function buildKeywordFilter(q: string): Prisma.JobWhereInput {
-  // Match each word of the query independently (in any order, anywhere
-  // across title/company/tags) rather than requiring the whole phrase as
-  // one literal substring — so "data engineer" matches a title like
-  // "Senior Data Platform Engineer", and "nodejs developer" matches
-  // "Node.js Developer" once punctuation is stripped from both sides.
+// Match each word of the query independently (in any order, anywhere
+// across title/company/tags) rather than requiring the whole phrase as one
+// literal substring — so "data engineer" matches a title like "Senior Data
+// Platform Engineer", and "nodejs developer" matches "Node.js Developer"
+// once punctuation is stripped from both sides. Every term must match
+// *somewhere* (title OR company OR a tag), same AND-of-ORs semantics as
+// before — just with tags now included in each term's OR.
+//
+// Raw SQL, not a Prisma typed filter, because tags need a case-insensitive
+// match (tags are stored mixed-case, e.g. "Machine learning") and Prisma's
+// array `has`/`hasSome` are exact-match/case-sensitive only — same reason
+// skillsMatchingIds below already goes through raw ILIKE instead of typed
+// filters. Live-confirmed bug this fixes: searching "java" previously only
+// checked title/company, so a job whose title doesn't literally contain
+// "java" but has "Java" as a tag was invisible to the main search box even
+// though the same term typed into the separate "Skills" filter would find
+// it — two different keyword-matching behaviors for what a user reasonably
+// expects to be the same kind of search.
+async function keywordMatchingIds(q: string): Promise<string[] | null> {
   const terms = q
     .trim()
     .toLowerCase()
     .replace(/[.\-_/]/g, " ")
     .split(/\s+/)
     .filter(Boolean);
+  if (terms.length === 0) return null;
 
-  // Note: tags are stored with mixed casing (e.g. "Machine learning"), and
-  // Prisma's array `has` filter is exact-match/case-sensitive with no
-  // case-insensitive equivalent — so tags aren't included here, since a
-  // lowercased term would silently fail to match most of them.
-  return {
-    AND: terms.map((term) => ({
-      OR: [
-        { title: { contains: term, mode: "insensitive" } },
-        { company: { contains: term, mode: "insensitive" } },
-      ],
-    })),
-  };
+  const termConditions = terms.map((term) => {
+    const pattern = `%${term}%`;
+    return Prisma.sql`(title ILIKE ${pattern} OR company ILIKE ${pattern} OR EXISTS (SELECT 1 FROM unnest(tags) AS t WHERE t ILIKE ${pattern}))`;
+  });
+  const rows = await prisma.$queryRaw<{ id: string }[]>(
+    Prisma.sql`SELECT id FROM jobs WHERE is_active = true AND ${Prisma.join(termConditions, " AND ")}`
+  );
+  return rows.map((r) => r.id);
 }
 
 // Records a search so it can be surfaced later as a quick-access link
@@ -251,15 +262,17 @@ export async function buildJobsWhere(
   const isAnyLocation = location === ANY_LOCATION;
   const isDefaultIndiaScope = !location && !isAnyLocation;
 
-  // Both resolve to `id: { in: [...] }` — collected into one array and
-  // merged via `AND` (rather than naively spread, which would let the
-  // second silently clobber the first under the same `id` key) so
-  // experienceLevel and skills can be filtered on at the same time.
-  const [experienceIds, skillIds] = await Promise.all([
+  // All three resolve to `id: { in: [...] }` — collected into one array and
+  // merged via `AND` (rather than naively spread, which would let a later
+  // one silently clobber an earlier one under the same `id` key) so
+  // keyword/experienceLevel/skills can all be filtered on at the same time.
+  const [keywordIds, experienceIds, skillIds] = await Promise.all([
+    q ? keywordMatchingIds(q) : Promise.resolve(null),
     experienceLevel ? experienceMatchingIds(experienceLevel) : Promise.resolve(null),
     tags ? skillsMatchingIds(tags) : Promise.resolve(null),
   ]);
   const idFilters: Prisma.JobWhereInput[] = [];
+  if (keywordIds) idFilters.push({ id: { in: keywordIds } });
   if (experienceIds) idFilters.push({ id: { in: experienceIds } });
   if (skillIds) idFilters.push({ id: { in: skillIds } });
 
@@ -270,7 +283,6 @@ export async function buildJobsWhere(
 
   const where: Prisma.JobWhereInput = {
     isActive: true,
-    ...(q ? buildKeywordFilter(q) : {}),
     ...(isDefaultIndiaScope
       ? indiaScopeFilter()
       : location && !isAnyLocation

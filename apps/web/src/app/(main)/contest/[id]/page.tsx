@@ -9,23 +9,18 @@ import { linkifyText } from "@/lib/linkify";
 // only changes on the next scrape/reap cycle, not per-request.
 export const revalidate = 60;
 
-const PLATFORM_LABELS: Record<string, string> = {
-  dev_community: "DEV Community",
-};
-
 export default async function ContestDetailPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const contest = await prisma.contest.findUnique({ where: { id }, select: CONTEST_SELECT });
 
   if (!contest) notFound();
 
-  const platformLabel = PLATFORM_LABELS[contest.platform] ?? contest.platform;
   const daysLeft = contest.deadlineAt
     ? Math.ceil((contest.deadlineAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     : null;
 
   return (
-    <main style={{ maxWidth: 1040, margin: "0 auto", padding: "40px 10px 64px" }}>
+    <main style={{ maxWidth: 1040, margin: "0 auto", padding: "40px 24px 64px" }}>
       <Link
         href="/contest"
         style={{
@@ -57,9 +52,11 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
               >
                 {contest.title}
               </h1>
-              <p style={{ margin: "5px 0 0", color: "var(--ink-muted)", fontSize: 15.5 }}>
-                {contest.organizer ?? platformLabel}
-              </p>
+              {contest.organizer && (
+                <p style={{ margin: "5px 0 0", color: "var(--ink-muted)", fontSize: 15.5 }}>
+                  {contest.organizer}
+                </p>
+              )}
             </div>
           </div>
 
@@ -74,8 +71,7 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
               gap: 8,
             }}
           >
-            <span>{platformLabel}</span>
-            {contest.mode !== "unknown" && <span>· {contest.mode.replace("_", " ")}</span>}
+            {contest.mode !== "unknown" && <span>{contest.mode.replace("_", " ")}</span>}
             {contest.startsAt && <span>· starts {contest.startsAt.toLocaleDateString("en-US")}</span>}
           </div>
 
@@ -187,15 +183,6 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
         <div className="detail-apply-card">
           <div className="card" style={{ padding: 22 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div>
-                <div style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--ink-faint)" }}>
-                  Platform
-                </div>
-                <div style={{ fontSize: 14.5, fontWeight: 600, color: "var(--ink)", marginTop: 2 }}>
-                  {platformLabel}
-                </div>
-              </div>
-
               {contest.deadlineAt && (
                 <div>
                   <div style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--ink-faint)" }}>
@@ -244,11 +231,10 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
                 fontSize: 14,
               }}
             >
-              Register on {platformLabel} →
+              Register now →
             </a>
             <p style={{ marginTop: 10, fontSize: 11.5, color: "var(--ink-faint)", textAlign: "center" }}>
-              Source: {platformLabel}. Not affiliated — registration happens on the official
-              platform site.
+              Not affiliated — registration happens on the official contest site.
             </p>
           </div>
         </div>
