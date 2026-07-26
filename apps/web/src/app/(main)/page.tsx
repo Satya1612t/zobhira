@@ -3,6 +3,7 @@ import { JobCard } from "@/components/JobCard";
 import { JobGridCard } from "@/components/JobGridCard";
 import { ContestCard } from "@/components/ContestCard";
 import { HomeSignupCta } from "@/components/HomeSignupCta";
+import { CareerExcellenceSection } from "@/components/CareerExcellenceSection";
 import { JOB_SELECT, jobOrderBy } from "@/lib/jobQuery";
 import { CONTEST_SELECT, CONTEST_ORDER_BY } from "@/lib/contestQuery";
 
@@ -55,7 +56,7 @@ export default async function HomePage() {
       {/* Hero */}
       <section
         style={{
-          maxWidth: 1160,
+          maxWidth: 1280,
           margin: "0 auto",
           padding: "56px 24px 40px",
           display: "flex",
@@ -141,7 +142,7 @@ export default async function HomePage() {
       </section>
 
       {/* Board status */}
-      <section style={{ maxWidth: 1160, margin: "0 auto", padding: "10px 24px 10px" }}>
+      <section style={{ maxWidth: 1280, margin: "0 auto", padding: "10px 24px 10px" }}>
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           <header style={{ padding: "14px 20px", borderBottom: "1px solid var(--color-divider)" }}>
             <span style={{ fontSize: 13, fontWeight: 700 }}>Zobhira &mdash; board status</span>
@@ -163,7 +164,7 @@ export default async function HomePage() {
 
       {/* Featured jobs */}
       {featuredJobs.length > 0 && (
-        <section style={{ maxWidth: 1160, margin: "0 auto", padding: "48px 24px 8px" }}>
+        <section style={{ maxWidth: 1280, margin: "0 auto", padding: "48px 24px 8px" }}>
           <span style={kickerStyle}>Featured roles</span>
           <h2 style={{ margin: "0 0 16px", fontSize: 24 }}>Fresh this week</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
@@ -177,7 +178,7 @@ export default async function HomePage() {
       {/* How it stays current */}
       <section
         style={{
-          maxWidth: 1160,
+          maxWidth: 1280,
           margin: "0 auto",
           padding: "24px 24px 0",
           display: "flex",
@@ -209,7 +210,7 @@ export default async function HomePage() {
 
       {/* Featured contests */}
       {featuredContests.length > 0 && (
-        <section style={{ maxWidth: 1160, margin: "0 auto", padding: "48px 24px 8px" }}>
+        <section style={{ maxWidth: 1280, margin: "0 auto", padding: "48px 24px 8px" }}>
           <span style={kickerStyle}>Featured contests</span>
           <h2 style={{ margin: "0 0 16px", fontSize: 24 }}>Hackathons closing soon</h2>
           <div style={{ display: "flex", gap: 16, overflowX: "auto", padding: "6px 2px 20px" }}>
@@ -222,8 +223,11 @@ export default async function HomePage() {
         </section>
       )}
 
+      {/* Career excellence (added — see CareerExcellenceSection.tsx) */}
+      <CareerExcellenceSection jobs={featuredJobs} />
+
       {/* Sign-up desk */}
-      <section style={{ maxWidth: 1160, margin: "0 auto", padding: "56px 24px 64px" }}>
+      <section style={{ maxWidth: 1280, margin: "0 auto", padding: "56px 24px 64px" }}>
         <HomeSignupCta />
       </section>
     </div>
