@@ -16,7 +16,7 @@ export default async function LiveOpeningPage({
   const recentSearches = await getRecentSearches();
 
   return (
-    <main style={{ maxWidth: 1040, margin: "0 auto", padding: "22px 10px 40px" }}>
+    <main style={{ maxWidth: 1040, margin: "0 auto", padding: "22px 24px 40px" }}>
       <h1
         style={{
           fontFamily: "var(--font-display)",

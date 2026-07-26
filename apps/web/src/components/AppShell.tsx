@@ -13,15 +13,28 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const hideSidebar = pathname === "/login";
 
-  // Lifted here (rather than living inside Sidebar) so Navbar can react to
-  // it too — see the sidebarOpen note in Navbar.tsx.
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Desktop-only: sidebar defaults to icon-only (see .sidebar's default
+  // width in globals.css) and expands to the full labeled width on click.
+  // Separate from sidebarOpen (mobile's show/hide) — on mobile this is
+  // ignored entirely, the drawer is always full-width when open.
+  const [desktopExpanded, setDesktopExpanded] = useState(false);
 
   return (
     <div className="app-shell">
-      {!hideSidebar && <Sidebar open={sidebarOpen} onOpenChange={setSidebarOpen} />}
-      <div className="main-content" style={hideSidebar ? { marginLeft: 0 } : undefined}>
-        <Navbar sidebarOpen={!hideSidebar && sidebarOpen} />
+      {!hideSidebar && (
+        <Sidebar
+          open={sidebarOpen}
+          onOpenChange={setSidebarOpen}
+          desktopExpanded={desktopExpanded}
+          onDesktopExpandedChange={setDesktopExpanded}
+        />
+      )}
+      <div
+        className={`main-content${!hideSidebar && desktopExpanded ? " main-content-expanded" : ""}`}
+        style={hideSidebar ? { marginLeft: 0 } : undefined}
+      >
+        <Navbar />
         <div className="main-scroll-area">
           {children}
           <Footer />

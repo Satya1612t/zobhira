@@ -51,6 +51,15 @@ function ProfileIcon() {
   );
 }
 
+function CollapseIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M15 5 8 12l7 7" />
+      <path d="M11 5v14" />
+    </svg>
+  );
+}
+
 const TABS = [
   { label: "Home", href: "/", Icon: HomeIcon },
   { label: "Jobs", href: "/jobs", Icon: JobsIcon },
@@ -59,8 +68,23 @@ const TABS = [
   { label: "Profile", href: "/profile", Icon: ProfileIcon },
 ];
 
-export function Sidebar({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function Sidebar({
+  open,
+  onOpenChange,
+  desktopExpanded,
+  onDesktopExpandedChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  desktopExpanded: boolean;
+  onDesktopExpandedChange: (expanded: boolean) => void;
+}) {
   const pathname = usePathname();
+  // Mobile's off-canvas drawer is always full-width/labeled regardless of
+  // the desktop collapse state (see .sidebar's mobile media query) — so
+  // labels/logo should render whenever EITHER "desktop expanded" OR "mobile
+  // drawer open" is true. Only the desktop icon-only mode hides them.
+  const showLabels = desktopExpanded || open;
 
   return (
     <>
@@ -90,20 +114,58 @@ export function Sidebar({ open, onOpenChange }: { open: boolean; onOpenChange: (
         className={`sidebar-backdrop${open ? " sidebar-open" : ""}`}
         onClick={() => onOpenChange(false)}
       />
-      <aside className={`sidebar${open ? " sidebar-open" : ""}`}>
-        <Link
-          href="/"
-          onClick={() => onOpenChange(false)}
+      <aside className={`sidebar${open ? " sidebar-open" : ""}${desktopExpanded ? " sidebar-expanded" : ""}`}>
+        <div
           style={{
             display: "flex",
             alignItems: "center",
-            textDecoration: "none",
+            justifyContent: showLabels ? "space-between" : "center",
             marginBottom: 26,
+            minHeight: 28,
           }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/zobhira-logo-light.png" alt="Zobhira" style={{ height: 28, width: "auto" }} />
-        </Link>
+          <Link
+            href="/"
+            onClick={() => onOpenChange(false)}
+            style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/logo.png" alt="Zobhira" style={{ height: 28, width: 28, objectFit: "contain", flexShrink: 0 }} />
+            {showLabels && (
+              <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 17, color: "var(--ink)" }}>
+                Zobhira
+              </span>
+            )}
+          </Link>
+          {/* Collapse-only — there's no matching "expand" button: on desktop,
+              clicking any nav icon below expands the sidebar (see the Link
+              onClick), so this only ever needs to offer the reverse. Hidden
+              entirely on mobile (see .sidebar-expand-toggle's media query)
+              since mobile's open/close is the hamburger + backdrop instead. */}
+          {desktopExpanded && (
+            <button
+              type="button"
+              className="sidebar-expand-toggle"
+              onClick={() => onDesktopExpandedChange(false)}
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
+              style={{
+                alignItems: "center",
+                justifyContent: "center",
+                width: 28,
+                height: 28,
+                flexShrink: 0,
+                borderRadius: "var(--radius-sm)",
+                border: "1px solid var(--line)",
+                background: "var(--surface)",
+                color: "var(--ink-muted)",
+                cursor: "pointer",
+              }}
+            >
+              <CollapseIcon />
+            </button>
+          )}
+        </div>
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {TABS.map(({ label, href, Icon }) => {
@@ -112,12 +174,17 @@ export function Sidebar({ open, onOpenChange }: { open: boolean; onOpenChange: (
               <Link
                 key={href}
                 href={href}
-                onClick={() => onOpenChange(false)}
+                onClick={() => {
+                  onOpenChange(false);
+                  onDesktopExpandedChange(true);
+                }}
+                title={showLabels ? undefined : label}
                 style={{
                   display: "flex",
                   alignItems: "center",
+                  justifyContent: showLabels ? "flex-start" : "center",
                   gap: 10,
-                  padding: "9px 10px",
+                  padding: showLabels ? "9px 10px" : "9px 0",
                   borderRadius: "var(--radius-sm)",
                   textDecoration: "none",
                   fontSize: 13.5,
@@ -127,7 +194,7 @@ export function Sidebar({ open, onOpenChange }: { open: boolean; onOpenChange: (
                 }}
               >
                 <Icon />
-                {label}
+                {showLabels && label}
               </Link>
             );
           })}
