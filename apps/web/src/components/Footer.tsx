@@ -170,7 +170,7 @@ export function Footer() {
 
           {/* Shortcuts: For Employers */}
           <div>
-            <h4 className="footer-heading">For Employers</h4>
+            <h4 className="footer-heading">Employers</h4>
             <ul className="footer-links">
               {FOR_EMPLOYERS.map((link) => (
                 <li key={link.label}>
@@ -180,9 +180,9 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Shortcuts: For Professionals */}
+          {/* Shortcuts: Professionals */}
           <div>
-            <h4 className="footer-heading">For Professionals</h4>
+            <h4 className="footer-heading">Professionals</h4>
             <ul className="footer-links">
               {FOR_PROFESSIONALS.map((link) => (
                 <li key={link.label}>
@@ -206,23 +206,6 @@ export function Footer() {
 
           {/* Download App & Language */}
           <div>
-            <h4 className="footer-heading">Download App</h4>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
-              <a href="#" className="footer-store-btn">
-                <PhoneIcon />
-                <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
-                  <span style={{ fontSize: 10, opacity: 0.8 }}>Download on the</span>
-                  <span style={{ fontSize: 13, fontWeight: 700 }}>App Store</span>
-                </span>
-              </a>
-              <a href="#" className="footer-store-btn">
-                <PlayStoreIcon />
-                <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
-                  <span style={{ fontSize: 10, opacity: 0.8 }}>Get it on</span>
-                  <span style={{ fontSize: 13, fontWeight: 700 }}>Google Play</span>
-                </span>
-              </a>
-            </div>
             <h4 className="footer-heading" style={{ marginBottom: 8 }}>Language</h4>
             <div style={{ position: "relative" }}>
               <select className="footer-select" defaultValue="en-US">
@@ -254,13 +237,6 @@ export function Footer() {
               <GlobeIcon />
               <span>Global Presence</span>
             </div>
-          </div>
-          <div className="footer-social-row">
-            {SOCIALS.map(({ label, href, Icon }) => (
-              <a key={label} href={href} aria-label={label}>
-                <Icon />
-              </a>
-            ))}
           </div>
         </div>
 

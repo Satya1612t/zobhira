@@ -2,7 +2,7 @@ import { JobCardSkeleton } from "@/components/JobCardSkeleton";
 
 export default function Loading() {
   return (
-    <main style={{ maxWidth: 760, margin: "0 auto", padding: "40px 24px 64px" }}>
+    <main style={{ maxWidth: 1280, margin: "0 auto", padding: "40px 24px 64px" }}>
       <div
         className="skeleton-shimmer"
         style={{

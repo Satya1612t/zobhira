@@ -20,7 +20,7 @@ export default async function ContestPage({
   });
 
   return (
-    <main style={{ maxWidth: 1160, margin: "0 auto", padding: "40px 24px 60px" }}>
+    <main style={{ maxWidth: 1280, margin: "0 auto", padding: "40px 24px 60px" }}>
       <h1 style={{ margin: "0 0 8px", fontSize: 32 }}>Live contests &amp; hackathons</h1>
       <p style={{ color: "var(--ink-muted)", marginTop: 0, marginBottom: 24, fontSize: 15, maxWidth: "60ch" }}>
         Compete in real-world challenges, sharpen your skills, and get noticed — refreshed on a

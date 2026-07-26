@@ -20,7 +20,7 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
     : null;
 
   return (
-    <main style={{ maxWidth: 1040, margin: "0 auto", padding: "40px 24px 64px" }}>
+    <main style={{ maxWidth: 1280, margin: "0 auto", padding: "40px 24px 64px" }}>
       <Link
         href="/contest"
         style={{

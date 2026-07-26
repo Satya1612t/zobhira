@@ -754,7 +754,7 @@ a {
   margin-top: 40px;
   background: var(--color-surface-muted);
   border-top: 1px solid var(--line);
-  padding: 48px 24px 24px;
+  padding: 48px 32px 32px;
 }
 .footer-inner {
   max-width: 1280px;
@@ -865,6 +865,7 @@ a {
   display: flex;
   align-items: center;
   gap: 16px;
+  margin: 16px 0 0;
 }
 .footer-social-row a {
   color: var(--ink-muted);

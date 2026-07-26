@@ -1,27 +1,29 @@
 export default function AboutPage() {
   return (
-    <main style={{ maxWidth: 720, margin: "0 auto", padding: "40px 24px 64px" }}>
-      <h1
-        style={{
-          fontFamily: "var(--font-display)",
-          fontSize: 26,
-          fontWeight: 600,
-          margin: "0 0 16px",
-          color: "var(--ink)",
-        }}
-      >
-        About Zobhira
-      </h1>
-      <div style={{ color: "var(--ink)", fontSize: 14.5, lineHeight: 1.7 }}>
-        <p>
-          Zobhira aggregates technical job listings from multiple hiring platforms into one
-          searchable board, curated for India-based and remote roles.
-        </p>
-        <p>
-          Listings are collected on a scheduled basis rather than on-demand, so what you see here
-          reflects the most recent update for each source rather than a live query against those
-          sites directly.
-        </p>
+    <main style={{ maxWidth: 1280, margin: "0 auto", padding: "40px 24px 64px" }}>
+      <div style={{ maxWidth: "70ch" }}>
+        <h1
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: 26,
+            fontWeight: 600,
+            margin: "0 0 16px",
+            color: "var(--ink)",
+          }}
+        >
+          About Zobhira
+        </h1>
+        <div style={{ color: "var(--ink)", fontSize: 14.5, lineHeight: 1.7 }}>
+          <p>
+            Zobhira aggregates technical job listings from multiple hiring platforms into one
+            searchable board, curated for India-based and remote roles.
+          </p>
+          <p>
+            Listings are collected on a scheduled basis rather than on-demand, so what you see here
+            reflects the most recent update for each source rather than a live query against those
+            sites directly.
+          </p>
+        </div>
       </div>
     </main>
   );
