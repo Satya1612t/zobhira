@@ -2,10 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { motion } from "motion/react";
 
-// Inline SVGs (no icon-library dependency, matching the rest of the app) —
-// stand-ins for the Material Symbols glyphs in the Stitch mood-board
-// ("home", "work", "emoji_events", "sensors", "person").
 function HomeIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -50,10 +48,19 @@ function ProfileIcon() {
     </svg>
   );
 }
-
-function CollapseIcon() {
+function CollapseIcon({ flipped }: { flipped: boolean }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ transform: flipped ? "rotate(180deg)" : undefined, transition: "transform var(--dur-base) var(--ease-out)" }}
+    >
       <path d="M15 5 8 12l7 7" />
       <path d="M11 5v14" />
     </svg>
@@ -62,10 +69,9 @@ function CollapseIcon() {
 
 const TABS = [
   { label: "Home", href: "/", Icon: HomeIcon },
-  { label: "Jobs", href: "/jobs", Icon: JobsIcon },
-  { label: "Contests", href: "/contest", Icon: ContestsIcon },
-  { label: "Live Opening", href: "/live", Icon: LiveIcon },
-  { label: "Profile", href: "/profile", Icon: ProfileIcon },
+  { label: "Jobs", href: "/jobs", Icon: JobsIcon, countKey: "jobsCount" as const },
+  { label: "Contests", href: "/contest", Icon: ContestsIcon, countKey: "contestsCount" as const },
+  { label: "Today", href: "/today", Icon: LiveIcon },
 ];
 
 export function Sidebar({
@@ -73,11 +79,15 @@ export function Sidebar({
   onOpenChange,
   desktopExpanded,
   onDesktopExpandedChange,
+  jobsCount,
+  contestsCount,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   desktopExpanded: boolean;
   onDesktopExpandedChange: (expanded: boolean) => void;
+  jobsCount?: number;
+  contestsCount?: number;
 }) {
   const pathname = usePathname();
   // Mobile's off-canvas drawer is always full-width/labeled regardless of
@@ -85,120 +95,121 @@ export function Sidebar({
   // labels/logo should render whenever EITHER "desktop expanded" OR "mobile
   // drawer open" is true. Only the desktop icon-only mode hides them.
   const showLabels = desktopExpanded || open;
+  const counts: Record<string, number | undefined> = { jobsCount, contestsCount };
 
   return (
     <>
-      <button
-        className="sidebar-toggle"
-        onClick={() => onOpenChange(true)}
-        aria-label="Open menu"
-        style={{
-          position: "fixed",
-          top: 14,
-          left: 14,
-          zIndex: 20,
-          width: 38,
-          height: 38,
-          borderRadius: "var(--radius-sm)",
-          border: "1px solid var(--line)",
-          background: "var(--surface)",
-          color: "var(--ink)",
-          cursor: "pointer",
-          fontFamily: "var(--font-mono)",
-          fontSize: 16,
-        }}
-      >
-        ☰
-      </button>
-      <div
-        className={`sidebar-backdrop${open ? " sidebar-open" : ""}`}
-        onClick={() => onOpenChange(false)}
-      />
+      <div className={`sidebar-backdrop${open ? " sidebar-open" : ""}`} onClick={() => onOpenChange(false)} />
       <aside className={`sidebar${open ? " sidebar-open" : ""}${desktopExpanded ? " sidebar-expanded" : ""}`}>
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            justifyContent: showLabels ? "space-between" : "center",
+            justifyContent: showLabels ? "flex-start" : "center",
+            gap: 8,
             marginBottom: 26,
             minHeight: 28,
           }}
         >
-          <Link
-            href="/"
-            onClick={() => onOpenChange(false)}
-            style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
-          >
+          <Link href="/" onClick={() => onOpenChange(false)} style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/brand/logo.png" alt="Zobhira" style={{ height: 28, width: 28, objectFit: "contain", flexShrink: 0 }} />
-            {showLabels && (
-              <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 17, color: "var(--ink)" }}>
-                Zobhira
-              </span>
-            )}
+            {showLabels && <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 17, color: "var(--ink)" }}>Zobhira</span>}
           </Link>
-          {/* Collapse-only — there's no matching "expand" button: on desktop,
-              clicking any nav icon below expands the sidebar (see the Link
-              onClick), so this only ever needs to offer the reverse. Hidden
-              entirely on mobile (see .sidebar-expand-toggle's media query)
-              since mobile's open/close is the hamburger + backdrop instead. */}
-          {desktopExpanded && (
-            <button
-              type="button"
-              className="sidebar-expand-toggle"
-              onClick={() => onDesktopExpandedChange(false)}
-              aria-label="Collapse sidebar"
-              title="Collapse sidebar"
-              style={{
-                alignItems: "center",
-                justifyContent: "center",
-                width: 28,
-                height: 28,
-                flexShrink: 0,
-                borderRadius: "var(--radius-sm)",
-                border: "1px solid var(--line)",
-                background: "var(--surface)",
-                color: "var(--ink-muted)",
-                cursor: "pointer",
-              }}
-            >
-              <CollapseIcon />
-            </button>
-          )}
         </div>
 
-        <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {TABS.map(({ label, href, Icon }) => {
+        <nav style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {TABS.map(({ label, href, Icon, countKey }, i) => {
             const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+            const count = countKey ? counts[countKey] : undefined;
             return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => {
-                  onOpenChange(false);
-                  onDesktopExpandedChange(true);
-                }}
-                title={showLabels ? undefined : label}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: showLabels ? "flex-start" : "center",
-                  gap: 10,
-                  padding: showLabels ? "9px 10px" : "9px 0",
-                  borderRadius: "var(--radius-sm)",
-                  textDecoration: "none",
-                  fontSize: 13.5,
-                  fontWeight: 600,
-                  color: active ? "var(--accent)" : "var(--ink-muted)",
-                  background: active ? "var(--accent-soft)" : "transparent",
-                }}
-              >
-                <Icon />
-                {showLabels && label}
-              </Link>
+              <div key={href} className="sidebar-item-wrap">
+                <Link
+                  href={href}
+                  onClick={() => {
+                    onOpenChange(false);
+                    onDesktopExpandedChange(true);
+                  }}
+                  aria-current={active ? "page" : undefined}
+                  className="sidebar-item"
+                  style={{ justifyContent: showLabels ? "flex-start" : "center" }}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="sidebar-active-indicator"
+                      className="sidebar-active-indicator"
+                      transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                    />
+                  )}
+                  <span
+                    className="sidebar-icon-tile"
+                    style={{
+                      background: active ? "var(--gradient-accent)" : "transparent",
+                      color: active ? "#fff" : "var(--color-text-muted)",
+                    }}
+                  >
+                    <Icon />
+                  </span>
+                  {showLabels && (
+                    <span
+                      className="sidebar-label"
+                      style={{ transitionDelay: `${i * 30}ms`, color: active ? "var(--color-accent)" : "var(--color-text-muted)" }}
+                    >
+                      {label}
+                    </span>
+                  )}
+                  {showLabels && typeof count === "number" && (
+                    <span className="chip chip--accent" style={{ marginLeft: "auto", fontSize: 10.5 }}>
+                      {count.toLocaleString()}
+                    </span>
+                  )}
+                </Link>
+                {!showLabels && (
+                  <span className="sidebar-tooltip" role="tooltip">
+                    {label}
+                  </span>
+                )}
+              </div>
             );
           })}
         </nav>
+
+        <div className="sidebar-bottom">
+          <div className="sidebar-item-wrap">
+            <Link
+              href="/profile"
+              onClick={() => onOpenChange(false)}
+              aria-current={pathname.startsWith("/profile") ? "page" : undefined}
+              className="sidebar-item"
+              style={{ justifyContent: showLabels ? "flex-start" : "center" }}
+            >
+              <span
+                className="sidebar-icon-tile"
+                style={{
+                  background: pathname.startsWith("/profile") ? "var(--gradient-accent)" : "transparent",
+                  color: pathname.startsWith("/profile") ? "#fff" : "var(--color-text-muted)",
+                }}
+              >
+                <ProfileIcon />
+              </span>
+              {showLabels && <span className="sidebar-label">Profile</span>}
+            </Link>
+            {!showLabels && <span className="sidebar-tooltip" role="tooltip">Profile</span>}
+          </div>
+
+          <button
+            type="button"
+            className="sidebar-item sidebar-toggle-btn"
+            onClick={() => onDesktopExpandedChange(!desktopExpanded)}
+            aria-label={desktopExpanded ? "Collapse sidebar" : "Expand sidebar"}
+            style={{ justifyContent: showLabels ? "flex-start" : "center" }}
+          >
+            <span className="sidebar-icon-tile" style={{ color: "var(--color-text-muted)" }}>
+              <CollapseIcon flipped={desktopExpanded} />
+            </span>
+            {desktopExpanded && <span className="sidebar-label">Collapse</span>}
+          </button>
+        </div>
       </aside>
     </>
   );

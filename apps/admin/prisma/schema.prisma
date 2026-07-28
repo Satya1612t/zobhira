@@ -89,3 +89,18 @@ model ScraperSource {
 
   @@map("scraper_sources")
 }
+
+// Write-only trail of destructive/mutating admin actions — see writeAuditLog
+// in lib/auditLog.ts for the one place rows get inserted.
+model AdminAuditLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  adminEmail String   @map("admin_email")
+  action     String
+  targetType String   @map("target_type")
+  targetId   String   @map("target_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("admin_audit_log")
+}

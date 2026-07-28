@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
+import { getTopLocations } from "@/lib/jobQuery";
 
-// "High-Utility Grid" footer, from the Stitch mood-board (Design >
-// "Dynamic Recruitment Portal" > "Footer - High-Utility Grid (Web)") —
-// ported 1:1 (copy, columns, trust badges, legal bar) except the brand
-// name and the icon rows, which now use real social platforms instead of
-// the mockup's generic placeholder glyphs.
+// Cached (5 min) rather than a live per-request fetch — Footer renders on
+// every page via the shared (main) layout, so an uncached Prisma call here
+// would force even the static About/Privacy/Terms pages into dynamic
+// rendering. See (main)/layout.tsx's getSidebarCounts for the same pattern.
+const getCachedTopLocations = unstable_cache(() => getTopLocations(6), ["footer-top-locations"], { revalidate: 300 });
 
 function InstagramIcon() {
   return (
@@ -31,14 +33,6 @@ function TelegramIcon() {
     </svg>
   );
 }
-function FacebookIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <path d="M15 8h-2a2 2 0 0 0-2 2v2H9v3h2v6h3v-6h2l1-3h-3v-2a1 1 0 0 1 1-1h2V8z" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
 function XIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -47,7 +41,6 @@ function XIcon() {
     </svg>
   );
 }
-
 function ShieldIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -56,108 +49,70 @@ function ShieldIcon() {
     </svg>
   );
 }
-function BadgeIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="8" r="6" />
-      <path d="M9 13.5 7 22l5-3 5 3-2-8.5" />
-    </svg>
-  );
-}
-function GlobeIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M3 12h18" />
-      <path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z" />
-    </svg>
-  );
-}
-function PhoneIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="6" y="2" width="12" height="20" rx="2" />
-      <path d="M11 18h2" />
-    </svg>
-  );
-}
-function PlayStoreIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m3 3 12 9-12 9V3Z" />
-      <path d="m15 12 6-3.5v7L15 12Z" />
-    </svg>
-  );
-}
-function ChevronDownIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
 
 const SOCIALS = [
   { label: "Instagram", href: "#", Icon: InstagramIcon },
   { label: "YouTube", href: "#", Icon: YouTubeIcon },
   { label: "Telegram", href: "#", Icon: TelegramIcon },
-  { label: "Facebook", href: "#", Icon: FacebookIcon },
   { label: "X", href: "#", Icon: XIcon },
 ];
 
-const FOR_EMPLOYERS = [
-  { label: "Post a Job", href: "#" },
-  { label: "Talent Sourcing", href: "#" },
-  { label: "Enterprise Solutions", href: "#" },
-  { label: "Recruitment Marketing", href: "#" },
-  { label: "Hiring API", href: "#" },
+const FIND_WORK = [
+  { label: "All jobs", href: "/jobs" },
+  { label: "Fresher roles", href: "/jobs?experienceLevel=fresher" },
+  { label: "Remote roles", href: "/jobs?workplaceType=remote" },
 ];
 
-const FOR_PROFESSIONALS = [
-  { label: "Browse Jobs", href: "/jobs" },
-  { label: "Career Advice", href: "#" },
-  { label: "Salary Insights", href: "#" },
-  { label: "Resume Builder", href: "#" },
-  { label: "Skills Verification", href: "#" },
+const COMPETE = [
+  { label: "Contests", href: "/contest" },
+  { label: "Added today", href: "/today" },
 ];
 
 const COMPANY = [
-  { label: "About Us", href: "/about" },
-  { label: "Our Impact", href: "#" },
-  { label: "Leadership", href: "#" },
-  { label: "Newsroom", href: "#" },
-  { label: "Contact Us", href: "/contact" },
-];
-
-const LEGAL_LINKS = [
-  { label: "Privacy Policy", href: "/privacy" },
-  { label: "Terms of Service", href: "#" },
-  { label: "Cookie Policy", href: "#" },
-  { label: "Accessibility Statement", href: "#" },
-  { label: "Sitemap", href: "#" },
+  { label: "About", href: "/about" },
+  { label: "Contact", href: "/contact" },
+  { label: "Privacy", href: "/privacy" },
+  { label: "Terms", href: "/terms" },
 ];
 
 function FooterLink({ href, children }: { href: string; children: React.ReactNode }) {
   const isInternal = href.startsWith("/");
-  if (isInternal) {
-    return <Link href={href}>{children}</Link>;
-  }
+  if (isInternal) return <Link href={href}>{children}</Link>;
   return <a href={href}>{children}</a>;
 }
 
-export function Footer() {
+function FooterColumn({ heading, links }: { heading: string; links: { label: string; href: string }[] }) {
   return (
-    <footer className="footer">
-      <div className="footer-inner">
+    <div>
+      <h4 className="footer-heading">{heading}</h4>
+      <ul className="footer-links">
+        {links.map((link) => (
+          <li key={link.label}>
+            <FooterLink href={link.href}>{link.label}</FooterLink>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export async function Footer() {
+  const topLocations = await getCachedTopLocations();
+  const byCity = topLocations.map((city) => ({ label: city, href: `/jobs?location=${encodeURIComponent(city)}` }));
+
+  return (
+    <footer className="footer section--dark edge-diagonal-top deco-grain" data-theme="dark">
+      <span className="footer-watermark" aria-hidden="true">
+        Zobhira
+      </span>
+      <div className="footer-inner" style={{ position: "relative" }}>
         <div className="footer-grid">
-          {/* Brand column */}
           <div>
-            <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 22, color: "var(--color-accent)", marginBottom: 10, display: "block" }}>
+            <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 22, color: "var(--color-text-onDark)", marginBottom: 10, display: "block" }}>
               Zobhira
             </span>
-            <p style={{ color: "var(--ink-muted)", fontSize: 13, lineHeight: 1.6, marginTop: 0, marginBottom: 16 }}>
-              The global standard for professional hiring. Built on trust, efficiency, and industrial-grade
-              reliability for the world&apos;s leading enterprises.
+            <p style={{ color: "var(--color-text-onDark-muted)", fontSize: 13, lineHeight: 1.6, marginTop: 0, marginBottom: 16, maxWidth: "32ch" }}>
+              New job and contest openings, updated every morning on one searchable board.
             </p>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {SOCIALS.map(({ label, href, Icon }) => (
@@ -168,89 +123,52 @@ export function Footer() {
             </div>
           </div>
 
-          {/* Shortcuts: For Employers */}
-          <div>
-            <h4 className="footer-heading">Employers</h4>
-            <ul className="footer-links">
-              {FOR_EMPLOYERS.map((link) => (
-                <li key={link.label}>
-                  <FooterLink href={link.href}>{link.label}</FooterLink>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <FooterColumn heading="Find work" links={FIND_WORK} />
+          <FooterColumn heading="Compete" links={COMPETE} />
+          {byCity.length > 0 && <FooterColumn heading="Popular cities" links={byCity} />}
+          <FooterColumn heading="Company" links={COMPANY} />
 
-          {/* Shortcuts: Professionals */}
           <div>
-            <h4 className="footer-heading">Professionals</h4>
-            <ul className="footer-links">
-              {FOR_PROFESSIONALS.map((link) => (
-                <li key={link.label}>
-                  <FooterLink href={link.href}>{link.label}</FooterLink>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Shortcuts: Company */}
-          <div>
-            <h4 className="footer-heading">Company</h4>
-            <ul className="footer-links">
-              {COMPANY.map((link) => (
-                <li key={link.label}>
-                  <FooterLink href={link.href}>{link.label}</FooterLink>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Download App & Language */}
-          <div>
-            <h4 className="footer-heading" style={{ marginBottom: 8 }}>Language</h4>
-            <div style={{ position: "relative" }}>
-              <select className="footer-select" defaultValue="en-US">
-                <option value="en-US">English (United States)</option>
-                <option value="de-DE">Deutsch (Deutschland)</option>
-                <option value="fr-FR">Français (France)</option>
-                <option value="es-ES">Español (España)</option>
-                <option value="ja-JP">日本語 (日本)</option>
-              </select>
-              <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "var(--ink-faint)" }}>
-                <ChevronDownIcon />
-              </span>
-            </div>
+            <h4 className="footer-heading">Stay updated</h4>
+            <p style={{ color: "var(--color-text-onDark-muted)", fontSize: 12.5, lineHeight: 1.5, margin: "0 0 12px" }}>
+              One email a week with new roles.
+            </p>
+            <form method="get" action="/login" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <input type="hidden" name="tab" value="signup" />
+              <input
+                className="input"
+                type="email"
+                name="email"
+                placeholder="you@example.com"
+                style={{ background: "rgba(255,255,255,0.08)", border: "1px solid var(--color-divider-onDark)", color: "var(--color-text-onDark)" }}
+              />
+              <button type="submit" className="btn btn-primary" style={{ width: "100%" }}>
+                Get job alerts
+              </button>
+            </form>
           </div>
         </div>
 
-        {/* Trust indicators & socials */}
         <div className="footer-trust-and-social">
           <div className="footer-trust-row">
             <div className="footer-trust-badge">
               <ShieldIcon />
-              <span>Secure Infrastructure</span>
+              <span>Secure infrastructure</span>
             </div>
             <div className="footer-trust-badge">
-              <BadgeIcon />
-              <span>ISO Certified</span>
-            </div>
-            <div className="footer-trust-badge">
-              <GlobeIcon />
-              <span>Global Presence</span>
+              <span>Free to use, no account needed to search</span>
             </div>
           </div>
         </div>
 
-        {/* Bottom legal bar */}
         <div className="footer-bottom">
-          <p style={{ fontSize: 12, color: "var(--ink-muted)", margin: 0 }}>
-            © {new Date().getFullYear()} Zobhira Global. All rights reserved.
+          <p style={{ fontSize: 12, color: "var(--color-text-onDark-muted)", margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+            <span className="footer-pulse-dot" aria-hidden="true" />
+            Board updated daily &middot; &copy; {new Date().getFullYear()} Zobhira. All rights reserved.
           </p>
           <div className="footer-legal-links">
-            {LEGAL_LINKS.map((link) => (
-              <FooterLink key={link.label} href={link.href}>
-                {link.label}
-              </FooterLink>
-            ))}
+            <FooterLink href="/privacy">Privacy Policy</FooterLink>
+            <FooterLink href="/terms">Terms of Service</FooterLink>
           </div>
         </div>
       </div>

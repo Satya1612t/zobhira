@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { JobListItem } from "@/lib/jobQuery";
 import { CompanyLogo } from "./CompanyLogo";
 import { extractTechnologies } from "@/lib/jobInsights";
+import { useToast } from "@/components/ui/Toast";
 
 function formatSalary(job: {
   salaryMin: unknown;
@@ -19,6 +20,13 @@ function formatSalary(job: {
   return `${currency} ${min ?? max}`;
 }
 
+function daysAgo(date: Date): string {
+  const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+  if (days <= 0) return "today";
+  if (days === 1) return "1d ago";
+  return `${days}d ago`;
+}
+
 // Every card gets the same total height regardless of how much optional
 // content a given job actually has (tags, salary, deadline) — each row
 // below reserves its own fixed height and clips overflow rather than
@@ -29,35 +37,56 @@ const META_ROW_HEIGHT = 20;
 
 export function JobCard({ job }: { job: JobListItem }) {
   const salary = formatSalary(job);
-  const topTechnologies = extractTechnologies(job.description, 3);
-  // Cosmetic only — no backend to persist this yet (see /DESIGN.md).
+  const topTechnologies = extractTechnologies(job.description, 4);
+  const overflowCount = Math.max(0, extractTechnologies(job.description, 99).length - 4);
+  // Cosmetic only — no backend to persist this yet (see /DESIGN.md). The
+  // toast is real feedback even though the save itself isn't persisted.
   const [saved, setSaved] = useState(false);
+  const showToast = useToast();
 
   return (
-    <div className="card" style={{ marginBottom: 14, position: "relative" }}>
+    <div className="job-card" style={{ marginBottom: 14, position: "relative" }}>
       <button
         type="button"
         aria-label={saved ? "Unsave" : "Save"}
         onClick={(e) => {
           e.preventDefault();
-          setSaved((v) => !v);
+          e.stopPropagation();
+          setSaved((v) => {
+            showToast(v ? "Removed from saved roles" : "Saved to your roles", "success");
+            return !v;
+          });
         }}
-        style={{ position: "absolute", top: 10, right: 10, background: "none", border: "none", cursor: "pointer", color: saved ? "var(--color-accent)" : "var(--ink-faint)", padding: 2 }}
+        className="job-card-save-btn"
+        style={{ color: saved ? "var(--color-accent)" : "var(--color-text-muted)" }}
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M19 21 12 16l-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
         </svg>
       </button>
       <Link href={`/jobs/${job.id}`} style={{ textDecoration: "none", color: "inherit" }}>
         <div style={{ display: "flex", gap: 16, alignItems: "center", minWidth: 0 }}>
-          <CompanyLogo logoUrl={job.logoUrl} company={job.company} size={48} />
+          <div className="job-card-logo-tile">
+            <CompanyLogo logoUrl={job.logoUrl} company={job.company} size={48} />
+          </div>
           <div style={{ minWidth: 0 }}>
-            <div className="card-title" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <div
+              style={{
+                fontFamily: "var(--font-display)",
+                fontWeight: 600,
+                fontSize: "var(--text-lg)",
+                lineHeight: 1.25,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                color: "var(--color-text)",
+              }}
+            >
               {job.title}
             </div>
             <div
               style={{
-                color: "var(--ink-muted)",
+                color: "var(--color-text-muted)",
                 marginTop: 4,
                 fontSize: 13.5,
                 overflow: "hidden",
@@ -66,6 +95,7 @@ export function JobCard({ job }: { job: JobListItem }) {
               }}
             >
               {job.company}
+              {job.location && <span> &middot; {job.location}</span>}
             </div>
           </div>
         </div>
@@ -76,19 +106,25 @@ export function JobCard({ job }: { job: JobListItem }) {
               {tech}
             </span>
           ))}
+          {overflowCount > 0 && <span className="tag tag-neutral">+{overflowCount}</span>}
+          {job.workplaceType !== "unknown" && <span className="tag tag-accent" style={{ textTransform: "capitalize" }}>{job.workplaceType}</span>}
+          {salary && <span className="tag tag-neutral">{salary}</span>}
         </div>
 
-        <div
-          className="card-meta"
-          style={{ marginTop: 14, height: META_ROW_HEIGHT, overflow: "hidden", flexWrap: "wrap" }}
-        >
-          <span>{job.location ?? "Location unknown"}</span>
-          {job.workplaceType !== "unknown" && <span>· {job.workplaceType}</span>}
-          {salary && <span>· {salary}</span>}
-          {job.postedAt && <span>· posted {job.postedAt.toLocaleDateString("en-US")}</span>}
+        <div className="job-card-footer" style={{ marginTop: 14, height: META_ROW_HEIGHT }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--color-text-muted)" }}>
+            {job.postedAt ? daysAgo(job.postedAt) : ""}
+          </span>
           {job.deadlineAt && (
-            <span style={{ color: "var(--warn)" }}>· apply by {job.deadlineAt.toLocaleDateString("en-US")}</span>
+            <span style={{ fontSize: 12, color: "var(--color-error)" }}>
+              Apply by {job.deadlineAt.toLocaleDateString("en-US", { timeZone: "Asia/Kolkata" })}
+            </span>
           )}
+          <span className="job-card-arrow" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
+          </span>
         </div>
       </Link>
     </div>

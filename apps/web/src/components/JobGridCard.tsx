@@ -15,25 +15,26 @@ function formatSalary(job: {
   return `${currency} ${min ?? max}`;
 }
 
-// Grid-style job card — used on the home page's "Featured roles" section
-// (see /DESIGN.md), adapted from the Stitch "Home with Modern Sidebar"
-// mockup's 3-up featured-jobs grid. JobCard.tsx (the rail/list style) is
-// unchanged and still used everywhere else.
+// Grid-style job card — homepage's "Featured roles" and /jobs's grid view.
+// JobCard.tsx (the list/rail style) is the default for /jobs; this is the
+// same visual system (shape-squircle, tinted logo tile) in a vertical stack.
 export function JobGridCard({ job }: { job: JobListItem }) {
   const salary = formatSalary(job);
 
   return (
-    <div className="card" style={{ height: "100%" }}>
+    <div className="job-grid-card shape-squircle" style={{ height: "100%" }}>
       <Link href={`/jobs/${job.id}`} style={{ textDecoration: "none", color: "inherit", display: "flex", flexDirection: "column", flex: 1, gap: 8 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <CompanyLogo logoUrl={job.logoUrl} company={job.company} size={44} />
+          <div className="job-card-logo-tile">
+            <CompanyLogo logoUrl={job.logoUrl} company={job.company} size={44} />
+          </div>
           {job.workplaceType !== "unknown" && (
             <span className="tag tag-neutral" style={{ textTransform: "capitalize" }}>
               {job.workplaceType}
             </span>
           )}
         </div>
-        <div className="card-title">{job.title}</div>
+        <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-base)", lineHeight: 1.3 }}>{job.title}</div>
         <div style={{ color: "var(--color-accent)", fontSize: 13.5, fontWeight: 600 }}>{job.company}</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", fontSize: 12, color: "var(--color-text-muted)", marginTop: "auto" }}>
           <span style={{ display: "flex", alignItems: "center", gap: 4 }}>

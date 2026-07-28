@@ -8,28 +8,23 @@ function sectionLabelStyle(compact: boolean): React.CSSProperties {
     fontSize: compact ? 9.5 : 10.5,
     letterSpacing: "0.06em",
     textTransform: "uppercase",
-    color: "var(--ink-faint)",
-    marginBottom: compact ? 7 : 10,
+    color: "var(--color-text-muted)",
+    marginBottom: compact ? 8 : 10,
   };
 }
 
-function streamLink(label: string, query: string, active: boolean, basePath: string, compact: boolean) {
+function streamChip(label: string, query: string, active: boolean, basePath: string) {
   return (
     <Link
       key={label}
       href={`${basePath}?q=${encodeURIComponent(query)}`}
-      className={`stream-link${active ? " stream-link-active" : ""}`}
+      className="chip stream-chip"
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: compact ? 6 : 8,
-        padding: compact ? "5px 6px" : "7px 8px",
-        borderRadius: "var(--radius-sm)",
+        background: active ? "var(--color-accent-soft)" : "var(--color-surface-muted)",
+        color: active ? "var(--color-accent)" : "var(--color-text-muted)",
         textDecoration: "none",
-        fontSize: compact ? 12 : 13,
       }}
     >
-      <span className="stream-link-dot" style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0 }} />
       {label}
     </Link>
   );
@@ -57,24 +52,25 @@ export function StreamsPanel({
   return (
     <aside
       style={{
-        padding: compact ? 10 : 14,
-        borderRadius: "var(--radius)",
-        background: "var(--surface)",
-        border: "1px solid var(--line)",
+        padding: compact ? 14 : 18,
+        borderRadius: "var(--radius-lg)",
+        background: "var(--color-surface)",
+        border: "1px solid var(--color-divider)",
+        boxShadow: "var(--shadow-sm)",
         height: "fit-content",
       }}
     >
       <span style={sectionLabelStyle(compact)}>Browse by stream</span>
-      <nav style={{ display: "flex", flexDirection: "column" }}>
-        {STREAMS.map((s) => streamLink(s.label, s.query, activeQuery === s.query, basePath, compact))}
-      </nav>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {STREAMS.map((s) => streamChip(s.label, s.query, activeQuery === s.query, basePath))}
+      </div>
 
       {uniqueRecent.length > 0 && (
-        <div style={{ marginTop: compact ? 12 : 18, paddingTop: compact ? 10 : 14, borderTop: "1px solid var(--line)" }}>
+        <div style={{ marginTop: compact ? 14 : 18, paddingTop: compact ? 12 : 14, borderTop: "1px solid var(--color-divider)" }}>
           <span style={sectionLabelStyle(compact)}>Recent searches</span>
-          <nav style={{ display: "flex", flexDirection: "column" }}>
-            {uniqueRecent.map((q) => streamLink(q, q, activeQuery === q, basePath, compact))}
-          </nav>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {uniqueRecent.slice(0, 8).map((q) => streamChip(q, q, activeQuery === q, basePath))}
+          </div>
         </div>
       )}
     </aside>

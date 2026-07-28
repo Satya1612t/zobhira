@@ -168,6 +168,37 @@ export async function getRecentSearches(limit = 12): Promise<string[]> {
   return rows.map((r) => r.query);
 }
 
+// Homepage Community section — real popular-search chips, not fabricated
+// activity. Ordered by how many times a query has actually been run.
+export async function getPopularSearches(limit = 6): Promise<string[]> {
+  const rows = await prisma.searchQuery.findMany({
+    orderBy: { searchCount: "desc" },
+    take: limit,
+    select: { query: true },
+  });
+  return rows.map((r) => r.query);
+}
+
+// Real aggregate, not a fabricated "N people online" claim — total searches
+// ever recorded across all distinct queries.
+export async function getTotalSearchActivity(): Promise<number> {
+  const result = await prisma.searchQuery.aggregate({ _sum: { searchCount: true } });
+  return result._sum.searchCount ?? 0;
+}
+
+// Footer's "Popular cities" links — genuine internal linking from real
+// inventory, not a hardcoded city list.
+export async function getTopLocations(limit = 6): Promise<string[]> {
+  const rows = await prisma.job.groupBy({
+    by: ["location"],
+    where: { isActive: true, location: { not: null } },
+    _count: true,
+    orderBy: { _count: { location: "desc" } },
+    take: limit,
+  });
+  return rows.map((r) => r.location).filter((l): l is string => Boolean(l));
+}
+
 export async function suggestCorrection(q: string): Promise<string | null> {
   // Only ever consulted when the normal keyword search comes back empty —
   // a trigram similarity lookup against titles already in the DB, so it

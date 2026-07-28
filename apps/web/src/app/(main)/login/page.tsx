@@ -67,11 +67,11 @@ export default function LoginPage({
             />
             <div style={{ position: "absolute", top: "6%", left: "6%", right: "40%" }}>
               <h1 style={{ fontSize: 38, lineHeight: 1.15, margin: "0 0 8px" }}>
-                Your Career Journey <span style={{ color: "var(--color-accent)" }}>Starts Here</span>
+                One page. <span style={{ color: "var(--color-accent)" }}>Every opening.</span>
               </h1>
               <p style={{ fontSize: 14, lineHeight: 1.45, color: "var(--color-text-)", margin: "0 0 10px" }}>
-                Discover jobs, hackathons, learning opportunities, <br></br> prizes, and placements — all
-                in one trusted <br></br> platform for students and professionals.
+                Save jobs for later, get an email when something new matches, <br></br> and never
+                miss a contest deadline.
               </p>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
                 <span style={{ color: "var(--color-accent)", flexShrink: 0, marginTop: 1 }}>
@@ -262,6 +262,9 @@ export default function LoginPage({
               <ShieldCheckIcon size={13} />
               Secure login &bull; Reliable platform &bull; Career-focused
             </div>
+            <p style={{ marginTop: 10, fontSize: 11, color: "var(--color-text-muted)", textAlign: "center" }}>
+              You can search Zobhira without an account.
+            </p>
           </div>
         </div>
       </div>

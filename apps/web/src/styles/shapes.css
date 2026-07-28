@@ -1,0 +1,75 @@
+/* Shape language — see /DESIGN.md "Editorial Signal". Kills the
+   all-rectangles problem: every major surface picks one of these instead of
+   a plain border-radius. Concentric radius rule applies wherever these
+   nest inside each other: outerRadius = innerRadius + padding. */
+
+.shape-arch {
+  border-radius: var(--radius-arch);
+}
+
+.shape-blob {
+  border-radius: var(--radius-blob);
+}
+
+.shape-squircle {
+  border-radius: var(--radius-lg);
+}
+
+.edge-diagonal-top {
+  clip-path: polygon(0 4vw, 100% 0, 100% 100%, 0 100%);
+}
+
+.edge-arc-bottom {
+  border-radius: 0 0 50% 50% / 0 0 6vw 6vw;
+}
+
+.mask-fade-b {
+  mask-image: linear-gradient(to bottom, #000 60%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent);
+}
+
+.mask-fade-x {
+  mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+}
+
+.deco-dotgrid {
+  background-image: radial-gradient(var(--color-divider) 1px, transparent 1px);
+  background-size: 16px 16px;
+  opacity: 0.5;
+}
+
+.deco-ring {
+  position: absolute;
+  border-radius: var(--radius-full);
+  border: 1.5px dashed var(--color-divider);
+  pointer-events: none;
+}
+
+.deco-blur-orb {
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  border-radius: var(--radius-full);
+  filter: blur(80px);
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.deco-blur-orb--accent {
+  background: var(--color-accent-soft);
+}
+
+.deco-blur-orb--signal {
+  background: var(--color-signal-soft);
+}
+
+.deco-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--texture-grain);
+  opacity: 0.035;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+}

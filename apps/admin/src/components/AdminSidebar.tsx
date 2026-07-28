@@ -49,12 +49,21 @@ function ProgressIcon() {
     </svg>
   );
 }
+function AuditLogIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 12h6M9 16h6M9 8h6" />
+      <path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+    </svg>
+  );
+}
 
 const TABS = [
   { label: "Jobs", href: "/jobs", Icon: JobsIcon },
   { label: "Contests", href: "/contests", Icon: ContestsIcon },
   { label: "Scheduler", href: "/scheduler", Icon: SchedulerIcon },
   { label: "Sources", href: "/sources", Icon: SourcesIcon },
+  { label: "Audit Log", href: "/audit-log", Icon: AuditLogIcon },
   { label: "Progress", href: "/progress", Icon: ProgressIcon, comingSoon: true },
 ];
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { linkifyText } from "@/lib/linkify";
 
 type StructuredDescription = {
@@ -59,15 +59,11 @@ function parseStructured(formatted: string): StructuredDescription | null {
 function BulletSection({ title, items }: { title: string; items: string[] }) {
   if (items.length === 0) return null;
   return (
-    <div style={{ marginTop: 20 }}>
-      <h3 style={{ margin: "0 0 10px", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 15, color: "var(--ink)" }}>
-        {title}
-      </h3>
-      <ul style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 6 }}>
+    <div className="job-desc-section">
+      <h3 className="job-desc-heading">{title}</h3>
+      <ul className="job-desc-list">
         {items.map((item, i) => (
-          <li key={i} style={{ color: "var(--ink)", fontSize: 14.5, lineHeight: 1.6 }}>
-            {linkifyText(item)}
-          </li>
+          <li key={i}>{linkifyText(item)}</li>
         ))}
       </ul>
     </div>
@@ -87,12 +83,14 @@ export function FormattedJobDescription({
 }) {
   const [formatted, setFormatted] = useState(formattedDescription);
   const [highlights, setHighlights] = useState(initialHighlights);
+  const [justSwapped, setJustSwapped] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [isLong, setIsLong] = useState(false);
 
   // Already cached (a previous viewer triggered the LLM call) — render
   // instantly, no fetch needed. Only the first-ever viewer of a job pays
   // the ~30-90s LLM latency; every viewer after that gets this for free.
-  // No loading indicator shown for this — it just swaps in silently
-  // whenever it resolves, same as it would on a page refresh.
   useEffect(() => {
     if (formatted || !description) return;
     let cancelled = false;
@@ -100,7 +98,10 @@ export function FormattedJobDescription({
       .then((res) => res.json())
       .then((data: { formatted_description?: string; highlights?: string[] }) => {
         if (cancelled) return;
-        if (data.formatted_description) setFormatted(data.formatted_description);
+        if (data.formatted_description) {
+          setFormatted(data.formatted_description);
+          setJustSwapped(true);
+        }
         if (Array.isArray(data.highlights)) setHighlights(data.highlights);
       })
       .catch(() => {
@@ -113,18 +114,14 @@ export function FormattedJobDescription({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    setIsLong((contentRef.current?.scrollHeight ?? 0) > 900);
+  }, [formatted, description]);
+
   if (!description) {
     return (
-      <div
-        style={{
-          marginTop: 26,
-          paddingTop: 22,
-          borderTop: "1px solid var(--line)",
-          color: "var(--ink-faint)",
-          fontSize: 14,
-        }}
-      >
-        No description available yet — see the original posting for full details.
+      <div style={{ marginTop: 26, paddingTop: 22, borderTop: "1px solid var(--line)", color: "var(--ink-faint)", fontSize: 14 }}>
+        No description available yet. See the original posting for full details.
       </div>
     );
   }
@@ -134,60 +131,46 @@ export function FormattedJobDescription({
   return (
     <div style={{ marginTop: 26, paddingTop: 22, borderTop: "1px solid var(--line)" }}>
       {highlights.length > 0 && (
-        <div style={{ marginBottom: 18 }}>
-          <div
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: 10.5,
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-              color: "var(--ink-faint)",
-              marginBottom: 7,
-            }}
-          >
-            Key highlights
-          </div>
+        <div style={{ marginBottom: 18 }} className={justSwapped ? "job-desc-cross-fade" : undefined}>
+          <div className="kicker" style={{ marginBottom: 8 }}>Key highlights</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {highlights.map((highlight) => (
-              <span
-                key={highlight}
-                style={{
-                  fontSize: 12.5,
-                  padding: "4px 11px",
-                  borderRadius: 999,
-                  background: "var(--accent-soft)",
-                  color: "var(--accent)",
-                  border: "1px solid var(--line)",
-                  fontWeight: 600,
-                }}
-              >
-                ✓ {highlight}
+              <span key={highlight} className="tag tag-accent">
+                &#10003; {highlight}
               </span>
             ))}
           </div>
         </div>
       )}
 
-      {structured ? (
-        <div>
-          {structured.overview && (
-            <div style={{ lineHeight: 1.7, whiteSpace: "pre-wrap", overflowWrap: "break-word", color: "var(--ink)", fontSize: 14.5 }}>
-              {linkifyText(structured.overview)}
+      {!formatted && (
+        <p className="job-desc-formatting-note">
+          Formatting this description
+          <span className="job-desc-dots"><span>.</span><span>.</span><span>.</span></span>
+        </p>
+      )}
+
+      <div className={`job-desc-collapse${!expanded && isLong ? " job-desc-collapse--closed" : ""}`}>
+        <div ref={contentRef} className={`job-desc-prose${justSwapped ? " job-desc-cross-fade" : ""}`}>
+          {structured ? (
+            <div>
+              {structured.overview && <p>{linkifyText(structured.overview)}</p>}
+              <BulletSection title={SECTION_LABELS.responsibilities} items={structured.responsibilities} />
+              <BulletSection title={SECTION_LABELS.requirements} items={structured.requirements} />
+              <BulletSection title={SECTION_LABELS.niceToHave} items={structured.niceToHave} />
+              <BulletSection title={SECTION_LABELS.benefits} items={structured.benefits} />
+              <BulletSection title={SECTION_LABELS.details} items={structured.details} />
             </div>
+          ) : (
+            <p style={{ whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>{linkifyText(formatted ?? description)}</p>
           )}
-          <BulletSection title={SECTION_LABELS.responsibilities} items={structured.responsibilities} />
-          <BulletSection title={SECTION_LABELS.requirements} items={structured.requirements} />
-          <BulletSection title={SECTION_LABELS.niceToHave} items={structured.niceToHave} />
-          <BulletSection title={SECTION_LABELS.benefits} items={structured.benefits} />
-          <BulletSection title={SECTION_LABELS.details} items={structured.details} />
         </div>
-      ) : (
-        // Plain text: either a pre-existing (old-format) cached row, or the
-        // deterministic-only fallback (empty-label lines stripped, but no
-        // LLM categorization — see job_formatter.py's `fallback` return).
-        <div style={{ lineHeight: 1.7, whiteSpace: "pre-wrap", overflowWrap: "break-word", color: "var(--ink)", fontSize: 14.5 }}>
-          {linkifyText(formatted ?? description)}
-        </div>
+        {!expanded && isLong && <div className="job-desc-fade-mask mask-fade-b" />}
+      </div>
+      {isLong && (
+        <button type="button" className="btn btn-secondary" style={{ marginTop: 12 }} onClick={() => setExpanded((v) => !v)}>
+          {expanded ? "Show less" : "Read full description"}
+        </button>
       )}
     </div>
   );

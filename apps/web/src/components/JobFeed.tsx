@@ -156,7 +156,7 @@ export function JobFeed({
                 fontSize: 12.5,
               }}
             >
-              No more matches for your filters — showing other recent listings
+              No more matches for your filters, showing other recent listings
             </div>
           )}
           <JobCard job={job} />

@@ -1,14 +1,27 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Fraunces, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import "../styles/shapes.css";
+import { ToastProvider } from "@/components/ui/Toast";
 
-// "HireAuthority" institutional design language: a single Inter family
-// across headings and body (see /DESIGN.md and the fetched mood-board).
-const inter = Inter({
+// "Editorial Signal" design language (see /DESIGN.md) — Fraunces (optical
+// serif) for display/headings, Plus Jakarta Sans for body/UI, JetBrains Mono
+// unchanged for kickers/timestamps. Replaces the single-Inter setup; keeping
+// the same --font-inter-shaped variable names would be misleading, so this
+// introduces --font-fraunces / --font-jakarta and globals.css's
+// --font-display / --font-body point at them instead.
+const fraunces = Fraunces({
   subsets: ["latin"],
-  weight: ["400", "600", "700", "800"],
-  variable: "--font-inter",
+  weight: ["600", "700", "900"],
+  style: ["normal", "italic"],
+  variable: "--font-fraunces",
+  display: "swap",
+});
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-jakarta",
   display: "swap",
 });
 const jetbrainsMono = JetBrains_Mono({
@@ -23,11 +36,11 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://zobhira.com"),
   title: {
-    default: "Zobhira — Technical jobs & contests, aggregated daily",
+    default: "Zobhira — Every technical job and contest on one board",
     template: "%s | Zobhira",
   },
   description:
-    "Zobhira aggregates technical job listings and hackathons from top platforms into one searchable board, refreshed around the clock.",
+    "Search technical roles and hackathons updated every morning. Dead listings removed automatically. Free, no account needed.",
 };
 
 // No app-shell here — the sidebar/navbar/footer chrome lives in
@@ -36,8 +49,19 @@ export const metadata: Metadata = {
 // site-wide metadata.
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body>{children}</body>
+    <html lang="en" className={`${fraunces.variable} ${jakarta.variable} ${jetbrainsMono.variable}`}>
+      <body>
+        <ToastProvider>{children}</ToastProvider>
+        {/* Portal target for every <Modal> — see components/ui/Modal.tsx.
+            Sits at the very end of <body> so its stacking context is never
+            trapped under an ancestor's transform/overflow. */}
+        <div id="modal-root" />
+        {/* Portal target for <ToastProvider> — see components/ui/Toast.tsx.
+            A stable, server-rendered (empty) container, not document.body
+            directly: portaling straight into document.body inserts a live
+            extra child mid-hydration and trips a hydration mismatch. */}
+        <div id="toast-root" />
+      </body>
     </html>
   );
 }
