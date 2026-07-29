@@ -12,16 +12,19 @@ COPY package.json package-lock.json* ./
 # never connects to a database, so a syntactically valid placeholder
 # DATABASE_URL is enough here.
 COPY prisma ./prisma
-ENV DATABASE_URL="postgresql://placeholder:placeholder@placeholder:5432/placeholder"
-RUN npm ci
+# Scoped to this one command, not a persistent ENV — a Dockerfile ENV stays
+# set for every later RUN in the same stage, which would leak this
+# placeholder into `next build` below and let webpack inline it as a
+# literal string into the compiled server chunks, permanently overriding
+# the real DATABASE_URL docker-compose sets at container start.
+RUN DATABASE_URL="postgresql://placeholder:placeholder@placeholder:5432/placeholder" npm ci
 
 FROM node:20-alpine AS build
 WORKDIR /app
 RUN apk add --no-cache openssl
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-ENV DATABASE_URL="postgresql://placeholder:placeholder@placeholder:5432/placeholder"
-RUN npx prisma generate
+RUN DATABASE_URL="postgresql://placeholder:placeholder@placeholder:5432/placeholder" npx prisma generate
 # NEXT_PUBLIC_* vars are inlined into the JS bundle at build time (not read
 # at container runtime like everything else in docker-compose.prod.yml), so
 # they have to arrive as build args here — see the `admin.build.args` block
