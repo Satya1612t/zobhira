@@ -4,6 +4,11 @@ import { allListingSlugs, MIN_LISTINGS_TO_INDEX } from "@/lib/designationCities"
 
 const BASE_URL = "https://zobhira.com";
 
+// No database is reachable during the Docker build stage, so this can't be
+// statically generated at build time — see the same note in
+// app/(main)/layout.tsx.
+export const dynamic = "force-dynamic";
+
 // /login is noindex (see its own metadata), /profile is a static mockup with
 // no real per-user content yet, and /progress just redirects out to the
 // admin app — none of the three belong in a sitemap search engines crawl.

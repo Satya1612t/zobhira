@@ -4,10 +4,18 @@ import { AppShell } from "@/components/AppShell";
 import { Footer } from "@/components/Footer";
 import { prisma } from "@/lib/prisma";
 
-// Cached, not a live per-request fetch — this layout wraps every page,
-// including the static About/Privacy/Terms/Contact pages, so an uncached
-// Prisma call here would force all of them into dynamic rendering. Counts
-// revalidate every 5 minutes, which is plenty fresh for a sidebar chip.
+// force-dynamic here (not just the unstable_cache below) because there's no
+// database reachable during the Docker build stage — it's an isolated build
+// context with no network path to the postgres service — so any attempt at
+// build-time static generation for a page under this layout fails outright,
+// even pages with no Prisma calls of their own, since they still inherit
+// this layout's data fetch. unstable_cache still caches the actual query
+// result for 5 minutes at the data layer, so this only gives up the HTML
+// shell being statically served, not the DB-query caching.
+export const dynamic = "force-dynamic";
+
+// Cached, not a live per-request fetch — counts revalidate every 5 minutes,
+// which is plenty fresh for a sidebar chip.
 const getSidebarCounts = unstable_cache(
   async () => {
     const [jobsCount, contestsCount] = await Promise.all([
