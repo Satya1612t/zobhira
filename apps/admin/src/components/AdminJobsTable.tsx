@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { adminFetch } from "@/lib/adminFetch";
 import { useToast } from "@/components/Toast";
 
@@ -27,6 +28,18 @@ export function AdminJobsTable() {
   const [isActive, setIsActive] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Free-text search is debounced (typing "software engineer" would
+  // otherwise fire 18 requests); source/status are instant since they're
+  // discrete choices, not keystrokes.
+  const [qInput, setQInput] = useState("");
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setPage(1);
+      setQ(qInput);
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [qInput]);
+
   useEffect(() => {
     setLoading(true);
     const params = new URLSearchParams({ page: String(page) });
@@ -41,6 +54,20 @@ export function AdminJobsTable() {
       })
       .finally(() => setLoading(false));
   }, [page, q, source, isActive]);
+
+  const activeFilters = [
+    q ? { key: "q", label: `"${q}"`, clear: () => { setQInput(""); setQ(""); } } : null,
+    source ? { key: "source", label: source, clear: () => setSource("") } : null,
+    isActive ? { key: "isActive", label: isActive === "true" ? "Active only" : "Inactive only", clear: () => setIsActive("") } : null,
+  ].filter((f): f is { key: string; label: string; clear: () => void } => f !== null);
+
+  function clearAllFilters() {
+    setQInput("");
+    setQ("");
+    setSource("");
+    setIsActive("");
+    setPage(1);
+  }
 
   async function toggleActive(job: AdminJob) {
     const next = !job.isActive;
@@ -76,51 +103,113 @@ export function AdminJobsTable() {
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-        <input
-          placeholder="Search title/company…"
-          value={q}
-          onChange={(e) => {
-            setPage(1);
-            setQ(e.target.value);
-          }}
-          style={{
-            padding: "8px 12px",
-            borderRadius: "var(--radius-sm)",
-            border: "1px solid var(--line)",
-            fontSize: 13.5,
-            minWidth: 220,
-          }}
-        />
-        <select
-          value={source}
-          onChange={(e) => {
-            setPage(1);
-            setSource(e.target.value);
-          }}
-          style={{ padding: "8px 12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--line)", fontSize: 13.5 }}
-        >
-          {SOURCES.map((s) => (
-            <option key={s} value={s}>
-              {s || "All sources"}
-            </option>
-          ))}
-        </select>
-        <select
-          value={isActive}
-          onChange={(e) => {
-            setPage(1);
-            setIsActive(e.target.value);
-          }}
-          style={{ padding: "8px 12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--line)", fontSize: 13.5 }}
-        >
-          <option value="">Active + inactive</option>
-          <option value="true">Active only</option>
-          <option value="false">Inactive only</option>
-        </select>
-        <span style={{ alignSelf: "center", color: "var(--ink-faint)", fontSize: 12.5 }}>
-          {total.toLocaleString()} total
-        </span>
+      <div
+        style={{
+          border: "1px solid var(--line)",
+          borderRadius: "var(--radius)",
+          background: "var(--surface)",
+          padding: 12,
+          marginBottom: 14,
+        }}
+      >
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ position: "relative", flex: "1 1 240px", minWidth: 200 }}>
+            <svg
+              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round"
+              style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+            <input
+              placeholder="Search title or company…"
+              value={qInput}
+              onChange={(e) => setQInput(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "8px 12px 8px 30px",
+                borderRadius: "var(--radius-sm)",
+                border: "1px solid var(--line)",
+                fontSize: 13.5,
+                background: "var(--bg, var(--surface))",
+              }}
+            />
+          </div>
+          <select
+            value={source}
+            onChange={(e) => {
+              setPage(1);
+              setSource(e.target.value);
+            }}
+            style={{ padding: "8px 12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--line)", fontSize: 13.5, color: "var(--ink)" }}
+          >
+            {SOURCES.map((s) => (
+              <option key={s} value={s}>
+                {s || "All sources"}
+              </option>
+            ))}
+          </select>
+          <select
+            value={isActive}
+            onChange={(e) => {
+              setPage(1);
+              setIsActive(e.target.value);
+            }}
+            style={{ padding: "8px 12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--line)", fontSize: 13.5, color: "var(--ink)" }}
+          >
+            <option value="">Active + inactive</option>
+            <option value="true">Active only</option>
+            <option value="false">Inactive only</option>
+          </select>
+          <span
+            style={{
+              marginLeft: "auto",
+              fontSize: 12,
+              fontWeight: 700,
+              color: "var(--accent)",
+              background: "var(--accent-soft)",
+              padding: "5px 10px",
+              borderRadius: "var(--radius-full, 999px)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {loading ? "…" : total.toLocaleString()} total
+          </span>
+        </div>
+
+        {activeFilters.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--line)" }}>
+            {activeFilters.map((f) => (
+              <button
+                key={f.key}
+                onClick={f.clear}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  padding: "4px 8px",
+                  borderRadius: "var(--radius-full, 999px)",
+                  border: "1px solid var(--line)",
+                  background: "var(--surface-hover)",
+                  color: "var(--ink)",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                {f.label}
+                <span aria-hidden="true" style={{ color: "var(--ink-faint)" }}>&times;</span>
+              </button>
+            ))}
+            <button
+              onClick={clearAllFilters}
+              style={{ background: "none", border: 0, color: "var(--accent)", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: "4px 4px" }}
+            >
+              Clear all
+            </button>
+          </div>
+        )}
       </div>
 
       <div
@@ -145,9 +234,12 @@ export function AdminJobsTable() {
             }}
           >
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <Link
+                href={`/jobs/${job.id}`}
+                style={{ fontWeight: 600, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", textDecoration: "none" }}
+              >
                 {job.title}
-              </div>
+              </Link>
               <div style={{ color: "var(--ink-muted)", fontSize: 12 }}>
                 {job.company} · {job.source} · {job.location ?? "—"}
               </div>

@@ -16,29 +16,32 @@ export const dynamic = "force-dynamic";
 // Thin Server Component — nine section components, in order, no inline
 // style={{}} objects. See 02-homepage.md.
 export default async function HomePage() {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
   const [
     jobsCount,
     contestsCount,
-    companies,
     featuredJobs,
     featuredContests,
-    companyLogos,
+    companyNames,
     popularSearches,
     totalSearches,
+    newTodayCount,
   ] = await Promise.all([
     prisma.job.count({ where: { isActive: true } }),
     prisma.contest.count({ where: { isActive: true } }),
-    prisma.job.groupBy({ by: ["company"], where: { isActive: true } }),
     prisma.job.findMany({ where: { isActive: true }, orderBy: jobOrderBy(), take: 8, select: JOB_SELECT }),
     prisma.contest.findMany({ where: { isActive: true }, orderBy: CONTEST_ORDER_BY, take: 4, select: CONTEST_SELECT }),
     prisma.job.findMany({
-      where: { isActive: true, logoUrl: { not: null } },
+      where: { isActive: true },
       distinct: ["company"],
       take: 24,
-      select: { company: true, logoUrl: true },
+      select: { company: true },
     }),
     getPopularSearches(6),
     getTotalSearchActivity(),
+    prisma.job.count({ where: { isActive: true, firstSeenAt: { gte: startOfToday } } }),
   ]);
 
   const jsonLd = {
@@ -57,8 +60,14 @@ export default async function HomePage() {
     <div>
       {/* eslint-disable-next-line react/no-danger */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <Hero jobsCount={jobsCount} contestsCount={contestsCount} companiesCount={companies.length} carouselJobs={featuredJobs.slice(0, 8)} />
-      <TrustBar companies={companyLogos} />
+      <Hero
+        jobsCount={jobsCount}
+        contestsCount={contestsCount}
+        newTodayCount={newTodayCount}
+        tickerJobs={featuredJobs.slice(0, 8)}
+        tickerContests={featuredContests.slice(0, 4)}
+      />
+      <TrustBar companies={companyNames.map((c) => c.company)} />
       <Services />
       <FeaturedRoles jobs={featuredJobs} jobsCount={jobsCount} />
       <Trustability />

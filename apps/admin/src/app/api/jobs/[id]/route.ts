@@ -3,6 +3,18 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/firebase-admin";
 import { writeAuditLog } from "@/lib/auditLog";
 
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const admin = await requireAdmin(request);
+  if (admin instanceof Response) return admin;
+
+  const job = await prisma.job.findUnique({ where: { id: params.id } });
+  if (!job) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return NextResponse.json(job);
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }

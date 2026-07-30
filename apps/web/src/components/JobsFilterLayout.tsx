@@ -339,7 +339,7 @@ export function JobsFilterLayout({
           </div>
         </aside>
 
-        <div>{children}</div>
+        <div className="jobs-listing-scrollbox">{children}</div>
 
         <div className="jobs-streams-panel-compact">{streamsPanel}</div>
       </div>

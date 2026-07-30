@@ -10,6 +10,7 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@lottiefiles/dotlottie-react": "^0.19.12",
     "@prisma/client": "^5.18.0",
     "motion": "^12.42.2",
     "next": "^14.2.5",

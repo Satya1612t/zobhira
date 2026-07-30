@@ -102,9 +102,6 @@ export async function Footer() {
 
   return (
     <footer className="footer section--dark edge-diagonal-top deco-grain" data-theme="dark">
-      <span className="footer-watermark" aria-hidden="true">
-        Zobhira
-      </span>
       <div className="footer-inner" style={{ position: "relative" }}>
         <div className="footer-grid">
           <div>

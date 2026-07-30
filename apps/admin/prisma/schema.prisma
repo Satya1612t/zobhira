@@ -38,6 +38,11 @@ model Job {
   lastScrapedAt    DateTime  @default(now()) @map("last_scraped_at")
   isActive         Boolean   @default(true) @map("is_active")
   extractionMethod String    @default("deterministic") @map("extraction_method")
+  // Structured on Himalayas postings only (see db/migrations/0017); other
+  // sources leave these null. Mirrors apps/web's schema — added here so the
+  // admin job detail page can show the same fields the public site does.
+  employmentType   String?   @map("employment_type")
+  seniority        String?
   raw              Json?
 
   @@index([source])

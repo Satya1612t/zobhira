@@ -2,31 +2,41 @@ import Link from "next/link";
 import { AspectBox } from "@/components/ui/AspectBox";
 import { Figure } from "@/components/ui/Figure";
 import { Reveal } from "@/components/ui/Reveal";
+import { ServiceLottieVisual } from "@/components/home/ServiceSearchVisual";
 
-const CARDS = [
-  {
-    title: "Search once, see everything",
-    body: "Type what you want. Filter by city, remote or office, how new it is, and how much experience it needs.",
-    image: "/images/service-search.png",
-    href: "/jobs",
-    cta: "Find jobs",
-    large: true,
-  },
+// Its visual is a Lottie animation (ServiceLottieVisual), not a stock
+// image, so it has no `image` field.
+const BIG_CARD = {
+  title: "Search once, see everything",
+  body: "Type what you want. Filter by city, remote or office, how new it is, and how much experience it needs.",
+  href: "/jobs",
+  cta: "Find jobs",
+  lottieSrc: "https://lottie.host/8506e694-051a-4b54-851a-432f2de27ad7/mS6RHMzTow.lottie",
+  lottieScale: 1.3,
+};
+
+type SmallCard = {
+  title: string;
+  body: string;
+  href: string;
+  cta: string;
+  lottieSrc: string;
+};
+
+const SMALL_CARDS: SmallCard[] = [
   {
     title: "Contests worth entering",
     body: "Hackathons and coding contests that are still open, with the deadline, prize, and who can join shown up front.",
-    image: "/images/service-contests.png",
+    lottieSrc: "https://lottie.host/b0510d17-19c1-4344-9acf-28c8e41b3a5f/zPwA7LJgts.lottie",
     href: "/contest",
     cta: "See contests",
-    large: false,
   },
   {
     title: "Job posts you can actually read",
     body: "Long job posts get cleaned up. Salary, experience, and requirements sit right at the top so you know in ten seconds if it's for you.",
-    image: "/images/service-parse.png",
+    lottieSrc: "https://lottie.host/8f011dc6-d631-474e-af88-9a1e494bd3d6/isg7JqyXS7.lottie",
     href: "/jobs",
     cta: "Try it",
-    large: false,
   },
 ];
 
@@ -47,7 +57,8 @@ function ArrowAffordance({ children }: { children: React.ReactNode }) {
 }
 
 export function Services() {
-  const [big, ...rest] = CARDS;
+  const big = BIG_CARD;
+  const rest = SMALL_CARDS;
   return (
     <section className="section">
       <div className="container">
@@ -83,8 +94,8 @@ export function Services() {
                 overflow: "hidden",
               }}
             >
-              <AspectBox ratio="4/3">
-                <Figure src={big.image} alt="" shape="none" />
+              <AspectBox ratio="1/1">
+                <ServiceLottieVisual src={big.lottieSrc} scale={big.lottieScale} />
               </AspectBox>
               <div style={{ padding: 24 }}>
                 <h3 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-xl)", margin: "0 0 8px" }}>{big.title}</h3>
@@ -111,9 +122,9 @@ export function Services() {
                     padding: 20,
                   }}
                 >
-                  <div style={{ width: 140, flexShrink: 0 }}>
-                    <AspectBox ratio="4/3" className="shape-arch">
-                      <Figure src={card.image} alt="" shape="arch" />
+                  <div style={{ width: 108, flexShrink: 0 }}>
+                    <AspectBox ratio="1/1" className="shape-squircle">
+                      <ServiceLottieVisual src={card.lottieSrc} scale={0.9} />
                     </AspectBox>
                   </div>
                   <div>
@@ -124,6 +135,20 @@ export function Services() {
                 </Link>
               </Reveal>
             ))}
+
+            {/* Fills the leftover vertical space below the stacked small
+                cards — the right column's natural height (two compact
+                horizontal cards) falls short of the big card's, leaving a
+                visible gap in the grid row otherwise. */}
+            <Reveal delay={0.08 * (rest.length + 1)} style={{ flex: 1, minHeight: 160 }}>
+              <Link
+                href="/jobs"
+                className="shape-blob services-card"
+                style={{ display: "block", position: "relative", height: "100%", overflow: "hidden", boxShadow: "var(--shadow-sm)" }}
+              >
+                <Figure src="/images/service-team-results.png" alt="" shape="none" />
+              </Link>
+            </Reveal>
           </div>
         </div>
       </div>

@@ -1,5 +1,11 @@
 import { AdminSourcesTable } from "@/components/AdminSourcesTable";
+import { AdminDangerZone } from "@/components/AdminDangerZone";
 
 export default function SourcesPage() {
-  return <AdminSourcesTable />;
+  return (
+    <div>
+      <AdminSourcesTable />
+      <AdminDangerZone />
+    </div>
+  );
 }

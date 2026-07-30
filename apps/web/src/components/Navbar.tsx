@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
 import { Modal } from "@/components/ui/Modal";
+import { SHOW_UNRELEASED_NAV } from "@/lib/authNavFlags";
 
 const NAV_LINKS = [
   { label: "Jobs", href: "/jobs" },
@@ -83,12 +84,16 @@ export function Navbar({
           <button type="button" className="navbar-icon-btn" aria-label="Search" onClick={() => setSearchOpen(true)}>
             <SearchIcon />
           </button>
-          <Link href="/login" className="btn btn-ghost navbar-signin-desktop">
-            Log in
-          </Link>
-          <Link href="/login?tab=signup" className="btn btn-primary" style={{ borderRadius: "var(--radius-full)", boxShadow: "var(--shadow-accent)" }}>
-            Sign up
-          </Link>
+          {SHOW_UNRELEASED_NAV && (
+            <>
+              <Link href="/login" className="btn btn-ghost navbar-signin-desktop">
+                Log in
+              </Link>
+              <Link href="/login?tab=signup" className="btn btn-primary" style={{ borderRadius: "var(--radius-full)", boxShadow: "var(--shadow-accent)" }}>
+                Sign up
+              </Link>
+            </>
+          )}
         </div>
       </header>
 

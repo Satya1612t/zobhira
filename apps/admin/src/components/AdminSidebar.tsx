@@ -5,6 +5,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 // Inline SVGs (no icon-library dependency), matching apps/web's Sidebar.
+function DashboardIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="8" height="8" rx="1.5" />
+      <rect x="13" y="3" width="8" height="5" rx="1.5" />
+      <rect x="13" y="11" width="8" height="10" rx="1.5" />
+      <rect x="3" y="14" width="8" height="7" rx="1.5" />
+    </svg>
+  );
+}
 function JobsIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -59,6 +69,7 @@ function AuditLogIcon() {
 }
 
 const TABS = [
+  { label: "Dashboard", href: "/dashboard", Icon: DashboardIcon, comingSoon: true },
   { label: "Jobs", href: "/jobs", Icon: JobsIcon },
   { label: "Contests", href: "/contests", Icon: ContestsIcon },
   { label: "Scheduler", href: "/scheduler", Icon: SchedulerIcon },

@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { motion } from "motion/react";
+import { SHOW_UNRELEASED_NAV } from "@/lib/authNavFlags";
 
 function HomeIcon() {
   return (
@@ -48,30 +50,11 @@ function ProfileIcon() {
     </svg>
   );
 }
-function CollapseIcon({ flipped }: { flipped: boolean }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      style={{ transform: flipped ? "rotate(180deg)" : undefined, transition: "transform var(--dur-base) var(--ease-out)" }}
-    >
-      <path d="M15 5 8 12l7 7" />
-      <path d="M11 5v14" />
-    </svg>
-  );
-}
-
 const TABS = [
   { label: "Home", href: "/", Icon: HomeIcon },
   { label: "Jobs", href: "/jobs", Icon: JobsIcon, countKey: "jobsCount" as const },
   { label: "Contests", href: "/contest", Icon: ContestsIcon, countKey: "contestsCount" as const },
-  { label: "Today", href: "/today", Icon: LiveIcon },
+  ...(SHOW_UNRELEASED_NAV ? [{ label: "Today", href: "/today", Icon: LiveIcon }] : []),
 ];
 
 export function Sidebar({
@@ -97,10 +80,28 @@ export function Sidebar({
   const showLabels = desktopExpanded || open;
   const counts: Record<string, number | undefined> = { jobsCount, contestsCount };
 
+  // No manual collapse/expand toggle — clicking anywhere inside the
+  // sidebar expands it, clicking anywhere outside collapses it back.
+  const asideRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!desktopExpanded) return;
+    function onDocClick(e: MouseEvent) {
+      if (asideRef.current && !asideRef.current.contains(e.target as Node)) {
+        onDesktopExpandedChange(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [desktopExpanded, onDesktopExpandedChange]);
+
   return (
     <>
       <div className={`sidebar-backdrop${open ? " sidebar-open" : ""}`} onClick={() => onOpenChange(false)} />
-      <aside className={`sidebar${open ? " sidebar-open" : ""}${desktopExpanded ? " sidebar-expanded" : ""}`}>
+      <aside
+        ref={asideRef}
+        onClick={() => onDesktopExpandedChange(true)}
+        className={`sidebar${open ? " sidebar-open" : ""}${desktopExpanded ? " sidebar-expanded" : ""}`}
+      >
         <div
           style={{
             display: "flex",
@@ -175,40 +176,29 @@ export function Sidebar({
         </nav>
 
         <div className="sidebar-bottom">
-          <div className="sidebar-item-wrap">
-            <Link
-              href="/profile"
-              onClick={() => onOpenChange(false)}
-              aria-current={pathname.startsWith("/profile") ? "page" : undefined}
-              className="sidebar-item"
-              style={{ justifyContent: showLabels ? "flex-start" : "center" }}
-            >
-              <span
-                className="sidebar-icon-tile"
-                style={{
-                  background: pathname.startsWith("/profile") ? "var(--gradient-accent)" : "transparent",
-                  color: pathname.startsWith("/profile") ? "#fff" : "var(--color-text-muted)",
-                }}
+          {SHOW_UNRELEASED_NAV && (
+            <div className="sidebar-item-wrap">
+              <Link
+                href="/profile"
+                onClick={() => onOpenChange(false)}
+                aria-current={pathname.startsWith("/profile") ? "page" : undefined}
+                className="sidebar-item"
+                style={{ justifyContent: showLabels ? "flex-start" : "center" }}
               >
-                <ProfileIcon />
-              </span>
-              {showLabels && <span className="sidebar-label">Profile</span>}
-            </Link>
-            {!showLabels && <span className="sidebar-tooltip" role="tooltip">Profile</span>}
-          </div>
-
-          <button
-            type="button"
-            className="sidebar-item sidebar-toggle-btn"
-            onClick={() => onDesktopExpandedChange(!desktopExpanded)}
-            aria-label={desktopExpanded ? "Collapse sidebar" : "Expand sidebar"}
-            style={{ justifyContent: showLabels ? "flex-start" : "center" }}
-          >
-            <span className="sidebar-icon-tile" style={{ color: "var(--color-text-muted)" }}>
-              <CollapseIcon flipped={desktopExpanded} />
-            </span>
-            {desktopExpanded && <span className="sidebar-label">Collapse</span>}
-          </button>
+                <span
+                  className="sidebar-icon-tile"
+                  style={{
+                    background: pathname.startsWith("/profile") ? "var(--gradient-accent)" : "transparent",
+                    color: pathname.startsWith("/profile") ? "#fff" : "var(--color-text-muted)",
+                  }}
+                >
+                  <ProfileIcon />
+                </span>
+                {showLabels && <span className="sidebar-label">Profile</span>}
+              </Link>
+              {!showLabels && <span className="sidebar-tooltip" role="tooltip">Profile</span>}
+            </div>
+          )}
         </div>
       </aside>
     </>

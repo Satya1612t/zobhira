@@ -11,10 +11,22 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const targetType = searchParams.get("targetType") || undefined;
+  const action = searchParams.get("action") || undefined;
+  const q = searchParams.get("q")?.trim();
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
 
   const where: Prisma.AdminAuditLogWhereInput = {
     ...(targetType ? { targetType } : {}),
+    ...(action ? { action } : {}),
+    ...(q
+      ? {
+          OR: [
+            { adminEmail: { contains: q, mode: "insensitive" } },
+            { targetId: { contains: q, mode: "insensitive" } },
+            { action: { contains: q, mode: "insensitive" } },
+          ],
+        }
+      : {}),
   };
 
   const [entries, total] = await Promise.all([

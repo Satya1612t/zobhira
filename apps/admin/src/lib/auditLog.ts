@@ -4,8 +4,10 @@ import { prisma } from "@/lib/prisma";
 type AuditAction =
   | "job.delete"
   | "job.set_active"
+  | "job.clear_all"
   | "contest.delete"
   | "contest.set_active"
+  | "contest.clear_all"
   | "source.set_enabled"
   | "scheduler.trigger"
   | "contest_scheduler.trigger";

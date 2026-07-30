@@ -16,7 +16,7 @@ export function FeaturedRoles({ jobs, jobsCount }: { jobs: JobListItem[]; jobsCo
   const [featured, ...rest] = jobs;
 
   return (
-    <section className="section">
+    <section className="section" style={{ paddingTop: 0 }}>
       <div className="container">
         <Reveal>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 12, marginBottom: 10 }}>

@@ -25,6 +25,16 @@ _SALARY_RANGE_RE = re.compile(
 )
 _TRAILING_CURRENCY_CODE_RE = re.compile(r"([A-Z]{3})\s*$")
 
+# YC's own company badge appends its batch code to the name in the DOM
+# text itself — "Vela (W26)", "Noora Health (W14)", "Intelligence Factory
+# (P26)" — a YC-internal cohort label, not part of the company's real name,
+# so it's stripped rather than stored/displayed.
+_YC_BATCH_SUFFIX_RE = re.compile(r"\s*\([A-Z]\d{2}\)\s*$")
+
+
+def strip_yc_batch(company: str) -> str:
+    return _YC_BATCH_SUFFIX_RE.sub("", company).strip()
+
 
 def parse_salary_text(salary_text: str | None) -> tuple[float | None, float | None, str | None]:
     """Verified against 20 real `salary_text` samples already in the DB —
@@ -129,7 +139,7 @@ class YCombinatorScraper(BaseJobScraper):
                     company = "Unknown"
                     company_el = card.locator("span.font-bold").first
                     if company_el.count() > 0:
-                        company = company_el.inner_text().strip()
+                        company = strip_yc_batch(company_el.inner_text().strip())
 
                     logo_url = None
                     logo_el = card.locator("img.logo").first
@@ -240,7 +250,7 @@ class YCombinatorScraper(BaseJobScraper):
             postings.append(
                 JobPosting(
                     title=item.get("title", "Unknown"),
-                    company=item.get("company", "Unknown"),
+                    company=strip_yc_batch(item.get("company", "Unknown")),
                     location=item.get("location"),
                     workplace_type=item.get("workplace_type") or "unknown",
                     salary_min=item.get("salary_min"),

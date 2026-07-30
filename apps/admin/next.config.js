@@ -6,7 +6,18 @@
 // Next's dev-mode Fast Refresh runtime evals a string to patch modules on
 // every save — production bundles don't include it, so 'unsafe-eval' is only
 // added outside production and the shipped CSP stays strict.
-const scriptSrc = ["'self'", "https://www.googletagmanager.com"];
+//
+// getAuth()/signInWithPopup() also proactively load Google's gapi client
+// (https://apis.google.com/js/api.js) to run Firebase's popup-redirect
+// resolver, which injects its own inline bootstrap script with fresh,
+// randomly-generated content on every single page load — a new sha256 hash
+// each time, so hash-allowlisting can never keep up. 'unsafe-inline' is the
+// only workable option for this one directive; it's the standard tradeoff
+// for apps using Google Identity/gapi-based sign-in. (Note: per the CSP
+// spec, 'unsafe-inline' is ignored by modern browsers if any hash/nonce
+// source is also present in script-src — so it must be the only inline
+// allowance here, not layered alongside a hash.)
+const scriptSrc = ["'self'", "https://www.googletagmanager.com", "https://apis.google.com", "'unsafe-inline'"];
 if (process.env.NODE_ENV !== "production") scriptSrc.push("'unsafe-eval'");
 
 const SECURITY_HEADERS = [
@@ -25,8 +36,8 @@ const SECURITY_HEADERS = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https:",
       "font-src 'self' data:",
-      "connect-src 'self' https://*.googleapis.com https://*.google-analytics.com https://*.analytics.google.com https://*.firebaseapp.com",
-      "frame-src https://*.firebaseapp.com https://accounts.google.com",
+      "connect-src 'self' https://*.googleapis.com https://apis.google.com https://*.google-analytics.com https://*.analytics.google.com https://*.firebaseapp.com",
+      "frame-src https://*.firebaseapp.com https://accounts.google.com https://apis.google.com",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",

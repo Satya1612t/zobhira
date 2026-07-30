@@ -1,32 +1,46 @@
 import { Marquee } from "@/components/ui/Marquee";
 
-type CompanyLogoRow = { company: string; logoUrl: string | null };
-
-// Real scraped logo images (each company's actual mark), natural color, no
-// section background — sits directly on the page. Only shows companies
-// with a real logoUrl on file; no generated/fallback mark stands in for a
-// missing one.
-export function TrustBar({ companies }: { companies: CompanyLogoRow[] }) {
-  const withLogo = companies.filter((c) => c.logoUrl);
-  if (withLogo.length === 0) return null;
+// Direction C "strap": plain text wordmarks in the site's own font (not
+// each brand's own logotype — recreating a company's proprietary font/
+// styling is a trademark concern, not just a style choice), against a dark
+// section, under the approved non-endorsement label from
+// zobhira-copy-and-seo.md §2 ("a true statement about your listings, not a
+// claim about your customers").
+export function TrustBar({ companies }: { companies: string[] }) {
+  if (companies.length === 0) return null;
 
   return (
-    <section style={{ paddingBlock: 32 }}>
-      <div className="container" style={{ display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
-        <div style={{ flex: 1, minWidth: 220 }}>
-          <Marquee durationSec={30}>
-            {withLogo.map((c) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={c.company}
-                src={c.logoUrl as string}
-                alt={`${c.company} logo`}
-                style={{ height: 52, width: "auto", objectFit: "contain" }}
-              />
-            ))}
-          </Marquee>
-        </div>
-      </div>
+    <section className="section--dark" style={{ paddingBlock: "clamp(34px, 4.4vw, 54px)" }}>
+      <p
+        style={{
+          textAlign: "center",
+          fontFamily: "var(--font-mono)",
+          fontSize: 11,
+          letterSpacing: "0.24em",
+          textTransform: "uppercase",
+          color: "rgba(255,255,255,0.42)",
+          margin: "0 0 28px",
+        }}
+      >
+        Companies with live openings this week
+      </p>
+      <Marquee durationSec={34}>
+        {companies.map((company) => (
+          <span
+            key={company}
+            style={{
+              fontFamily: "var(--font-display)",
+              fontWeight: 700,
+              fontSize: "clamp(20px, 2.4vw, 28px)",
+              color: "var(--color-text-onDark)",
+              opacity: 0.85,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {company}
+          </span>
+        ))}
+      </Marquee>
     </section>
   );
 }
