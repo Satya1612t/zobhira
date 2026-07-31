@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireDispatchKey } from "@/lib/dispatchAuth";
 import { extractTechnologies, extractExperience, extractEmail } from "@/lib/jobInsights";
@@ -76,13 +77,19 @@ async function getPostedTodayCounts(platform: string): Promise<Record<string, nu
   return counts;
 }
 
+// Fresher-only for now (0-1 yr, per experience_band/min_years_exp from
+// services/scraper/utils/field_enrichment.py) — a job with no classified
+// experience at all is excluded rather than assumed fresher-friendly, since
+// we genuinely don't know.
+const FRESHER_FILTER = Prisma.sql`AND (j.experience_band = 'fresher' OR j.min_years_exp <= 1)`;
+
 async function fetchCandidates(source: string, platform: string, limit: number): Promise<JobRow[]> {
   if (limit <= 0) return [];
 
   if (source === "linkedin") {
-    // LinkedIn: same-(IST)-day postings only, ranked by how complete the
-    // posting is (richness) rather than pure recency — a fuller posting
-    // wins over a slightly newer sparse one, per the source's own note.
+    // LinkedIn: same-(IST)-day postings only, newest first — same ordering
+    // every other source uses now (latest jobs only, not ranked by
+    // completeness).
     return prisma.$queryRaw<JobRow[]>`
       SELECT j.id, j.title, j.company, j.location, j.workplace_type AS "workplaceType",
              j.salary_min AS "salaryMin", j.salary_max AS "salaryMax",
@@ -92,20 +99,13 @@ async function fetchCandidates(source: string, platform: string, limit: number):
       WHERE j.is_active = true AND j.source = ${source}
         AND (COALESCE(j.posted_at, j.first_seen_at) AT TIME ZONE 'Asia/Kolkata')::date
             = (now() AT TIME ZONE 'Asia/Kolkata')::date
+        ${FRESHER_FILTER}
         AND NOT EXISTS (
           SELECT 1 FROM dispatch_log d
           WHERE d.content_type = 'job' AND d.content_id = j.id
             AND d.platform = ${platform} AND d.posted_at IS NOT NULL
         )
-      ORDER BY (
-          (CASE WHEN j.salary_min IS NOT NULL THEN 1 ELSE 0 END) +
-          (CASE WHEN j.description IS NOT NULL AND length(j.description) > 200 THEN 1 ELSE 0 END) +
-          (CASE WHEN array_length(j.highlights, 1) > 0 THEN 1 ELSE 0 END) +
-          (CASE WHEN array_length(j.tags, 1) > 0 THEN 1 ELSE 0 END) +
-          (CASE WHEN j.logo_url IS NOT NULL THEN 1 ELSE 0 END) +
-          (CASE WHEN j.deadline_at IS NOT NULL THEN 1 ELSE 0 END)
-        ) DESC,
-        COALESCE(j.posted_at, j.first_seen_at) DESC
+      ORDER BY COALESCE(j.posted_at, j.first_seen_at) DESC
       LIMIT ${limit}
     `;
   }
@@ -118,6 +118,7 @@ async function fetchCandidates(source: string, platform: string, limit: number):
            j.description, j.tags, j.posted_at AS "postedAt", j.source
     FROM jobs j
     WHERE j.is_active = true AND j.source = ${source}
+      ${FRESHER_FILTER}
       AND NOT EXISTS (
         SELECT 1 FROM dispatch_log d
         WHERE d.content_type = 'job' AND d.content_id = j.id
