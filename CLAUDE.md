@@ -94,10 +94,13 @@ FreeLLMAPI instance first (aggregates free-tier quotas across ~29 providers), th
 direct Gemini/Anthropic/OpenAI keys. All optional; deterministic scraping is the primary path and
 works with none of them configured.
 
-`api.py` runs two independent APScheduler instances (jobs: `scheduler.py`, tiered by source volume;
-contests: `contest_scheduler.py`) plus reap jobs (deactivate stale/expired jobs; **delete** expired
-contests outright, since a past-deadline contest has nothing left to register for). Manual trigger
-+ progress endpoints exist per source — see README.md "Schedulers" for the exact cadence table.
+`api.py` runs three independent APScheduler instances (jobs: `scheduler.py`, tiered by source
+volume; contests: `contest_scheduler.py`; skill vocabulary mining: `skill_miner_scheduler.py`,
+weekly) plus reap jobs (deactivate stale/expired jobs; **delete** expired contests outright, since
+a past-deadline contest has nothing left to register for) and a daily `prune_analytics_job`
+(trims `page_view`/`apply_click` past their retention window — see `apps/web`'s analytics bullet
+above). Manual trigger + progress endpoints exist per source and for the skill miner — see
+README.md "Schedulers" for the exact cadence table.
 
 ### Web app (`apps/web`)
 - **Route groups**: `src/app/(main)/*` is every public page (home, `/jobs`, `/jobs/[id]`,
@@ -131,6 +134,15 @@ contests outright, since a past-deadline contest has nothing left to register fo
   mark them posted (e.g. to Telegram), tracked via the `DispatchLog` model
   (`(contentType, contentId, platform)` unique, retry-safe on `postedAt IS NULL`). Not used by the
   web UI itself.
+- **First-party analytics** (`db/migrations/0021`, no third-party script): `src/middleware.ts`
+  assigns `zb_vid`/`zb_sid` cookies and resolves `zb_src` (UTM/referrer attribution) once per
+  session; `<Analytics/>` (root `layout.tsx`, in Suspense) fires page views to `POST /api/track`,
+  `JobDetailActions`/`ContestDetailActions` fire apply/register clicks the same way. Written to
+  `PageView`/`ApplyClick` (`page_view`/`apply_click` tables) — `traffic_source` there is the
+  *visitor's* origin (instagram/google/direct), never confused with `jobs.source`/
+  `contests.platform` (the scraper origin, internal-only per the invariant above). Read by
+  `apps/admin`'s `GET /api/analytics` (see below). Pruned on a schedule — see `services/scraper`
+  section.
 - **Stitch integration**: Stitch mockups (accessed via the `mcp__stitch__*` tools, project
   "Dynamic Recruitment Portal") are the design reference for most pages/components — screens are
   ported faithfully (content, structure) but always re-implemented in this app's own token system,
@@ -142,8 +154,10 @@ contests outright, since a past-deadline contest has nothing left to register fo
 Firebase Auth-gated (`requireAdmin`), same Prisma-over-Postgres pattern as `apps/web` but its own
 `schema.prisma`/client. Surfaces: jobs/contests CRUD, `ScraperSource` enable/disable, scheduler
 progress + manual trigger proxying through to the scraper API (`SCRAPER_API_URL`), link-health
-checking. Deliberately unauthenticated when run locally (see README) — don't expose port 3002
-beyond localhost in dev.
+checking, and an `/analytics` dashboard (`GET /api/analytics` — visitors/sources/top-clicked
+listings/daily trend, all `::int`-cast to avoid BigInt-vs-`NextResponse.json()` crashes) reading
+the `page_view`/`apply_click` tables `apps/web` writes. Deliberately unauthenticated when run
+locally (see README) — don't expose port 3002 beyond localhost in dev.
 
 ## Repo layout
 ```

@@ -29,15 +29,15 @@ const EMPLOYMENT_TYPES = [
   { value: "Parttime", label: "Part-time" },
   { value: "Contract", label: "Contract" },
   { value: "Internship", label: "Internship" },
-  { value: "Intern", label: "Intern" },
+  { value: "Apprenticeship", label: "Apprenticeship / Trainee" },
 ];
 const EXPERIENCE_LEVELS = [
   { value: "", label: "Any" },
-  { value: "fresher", label: "Fresher" },
-  { value: "1+", label: "1+ years" },
-  { value: "2+", label: "2+ years" },
-  { value: "3+", label: "3+ years" },
-  { value: "5+", label: "5+ years" },
+  { value: "fresher", label: "Fresher (0-1 yr)" },
+  { value: "junior", label: "Junior (1-3 yrs)" },
+  { value: "mid", label: "Mid (3-5 yrs)" },
+  { value: "senior", label: "Senior (5-8 yrs)" },
+  { value: "lead", label: "Lead (8+ yrs)" },
 ];
 
 const fieldStyle: React.CSSProperties = {

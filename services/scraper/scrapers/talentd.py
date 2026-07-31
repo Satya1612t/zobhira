@@ -244,6 +244,14 @@ class TalentdScraper(BaseJobScraper):
             # they're deliberately not read here (no dead lookups).
             employment_type = job_node.get("employmentType")
             if employment_type:
+                # Raw schema.org value (e.g. "FULL_TIME", "CONTRACTOR") goes
+                # onto the posting itself so utils/field_enrichment.py's
+                # canonical_employment_type() can resolve it into the
+                # indexed employment_type column — previously this only ever
+                # reached `tags`, so the column stayed null for every
+                # Talentd posting and only the tag-based OR fallback in
+                # jobQuery.ts's employmentTypeFilter caught it.
+                posting.employment_type = employment_type
                 # Match the existing tag style already used elsewhere
                 # (e.g. YCombinator's "Fulltime", not "full-time").
                 normalized = employment_type.replace("-", "").replace(" ", "").capitalize()

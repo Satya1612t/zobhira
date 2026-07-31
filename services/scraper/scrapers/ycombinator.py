@@ -183,6 +183,12 @@ class YCombinatorScraper(BaseJobScraper):
                             logo_url=logo_url,
                             extraction_method="deterministic",
                             raw={"detail_spans": detail_spans, "salary_text": salary_text},
+                            # Raw site text (e.g. "Full-time") — previously
+                            # only ever reached `tags`; setting it here too
+                            # lets utils/field_enrichment.py's
+                            # canonical_employment_type() resolve it into the
+                            # indexed employment_type column.
+                            employment_type=employment_type,
                         )
                     )
 

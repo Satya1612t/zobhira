@@ -69,12 +69,32 @@ model Job {
   // NULL means never checked. See db/migrations/0015_add_job_link_checked_at.sql.
   linkCheckedAt    DateTime? @map("link_checked_at")
 
+  // Derived at ingest (services/scraper/utils/field_enrichment.py), read-only
+  // from the app's side. See db/migrations/0019.
+  minYearsExp      Decimal?  @map("min_years_exp")
+  maxYearsExp      Decimal?  @map("max_years_exp")
+  experienceBand   String?   @map("experience_band")
+  expSource        String?   @map("exp_source")
+  tagsNorm         String[]  @default([]) @map("tags_norm")
+  fieldProvenance  Json      @default("{}") @map("field_provenance")
+  enrichedAt       DateTime? @map("enriched_at")
+  enrichmentHash   String?   @map("enrichment_hash")
+
+  // SAME DRIFT WARNING AS qualityScore: this is a Postgres GENERATED ALWAYS
+  // ... STORED column that Prisma has no syntax for. Declared as a plain Int
+  // to keep Prisma read-only on it. NEVER run `prisma db push` or
+  // `prisma migrate dev` against this database — either would reconcile this
+  // into a real integer column and silently drop the generated expression.
+  fresherRank      Int       @default(2) @map("fresher_rank")
+
   @@index([source])
   @@index([location])
   @@index([postedAt])
   @@index([tags], type: Gin)
   @@index([isActive, postedAt])
   @@index([qualityScore])
+  @@index([experienceBand])
+  @@index([tagsNorm], type: Gin)
   @@map("jobs")
 }
 
@@ -166,4 +186,89 @@ model DispatchLog {
   @@unique([contentType, contentId, platform])
   @@index([platform, contentType, contentId])
   @@map("dispatch_log")
+}
+
+// First-party traffic analytics (db/migrations/0021), written here, read by
+// apps/admin's GET /api/analytics. traffic_source is deliberately NOT
+// jobs.source: that column is the scraper origin (internal-only), this one
+// is where the VISITOR came from (instagram, google, direct).
+model PageView {
+  id            BigInt   @id @default(autoincrement())
+  visitorId     String   @map("visitor_id") @db.Uuid
+  sessionId     String   @map("session_id") @db.Uuid
+  path          String
+  referrer      String?
+  trafficSource String   @default("direct") @map("traffic_source")
+  utmMedium     String?  @map("utm_medium")
+  utmCampaign   String?  @map("utm_campaign")
+  device        String?
+  country       String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt(sort: Desc)])
+  @@index([trafficSource, createdAt(sort: Desc)])
+  @@index([visitorId])
+  @@map("page_view")
+}
+
+// content_type/content_id mirrors DispatchLog's convention, so contest
+// clicks are covered by the same table with no schema change.
+model ApplyClick {
+  id            BigInt   @id @default(autoincrement())
+  visitorId     String   @map("visitor_id") @db.Uuid
+  sessionId     String   @map("session_id") @db.Uuid
+  contentType   String   @map("content_type")
+  contentId     String   @map("content_id") @db.Uuid
+  trafficSource String   @default("direct") @map("traffic_source")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt(sort: Desc)])
+  @@index([trafficSource, createdAt(sort: Desc)])
+  @@index([visitorId])
+  @@index([contentType, contentId])
+  @@map("apply_click")
+}
+
+// Self-growing skill vocabulary (migration 0020) — replaces the hardcoded
+// dict that used to live twice (services/scraper/utils/skill_vocab.py for
+// the writer, this app's skillVocab.ts for the reader). Both sides now read
+// these same tables, grown by services/scraper/scripts/mine_skills.py from
+// scraped descriptions and from skill searches that returned nothing (see
+// SkillQueryMiss). See db/migrations/0020's scope-guard comment: skills
+// only, never designations/employment types/locations/degrees.
+model Skill {
+  canonical       String       @id
+  normalized      String       @unique
+  origin          String       @default("seed")
+  status          String       @default("active")
+  ambiguous       Boolean      @default(false)
+  contextRequired String[]     @default([]) @map("context_required")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  aliases         SkillAlias[]
+
+  @@map("skills")
+}
+
+model SkillAlias {
+  normalized String   @id
+  display    String
+  canonical  String
+  origin     String   @default("seed")
+  createdAt  DateTime @default(now()) @map("created_at")
+  skill      Skill    @relation(fields: [canonical], references: [canonical], onDelete: Cascade)
+
+  @@index([canonical])
+  @@map("skill_aliases")
+}
+
+// Zero-result skill searches — the highest-signal input the miner has. See
+// apps/web/src/lib/skillVocab.ts::recordSkillMisses.
+model SkillQueryMiss {
+  normalized  String   @id
+  display     String
+  missCount   Int      @default(1) @map("miss_count")
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at")
+
+  @@map("skill_query_misses")
 }

@@ -44,12 +44,24 @@ model Job {
   employmentType   String?   @map("employment_type")
   seniority        String?
   raw              Json?
+  // Derived at ingest (services/scraper/utils/field_enrichment.py), read-only
+  // from the app's side. See db/migrations/0019.
+  minYearsExp      Decimal?  @map("min_years_exp")
+  maxYearsExp      Decimal?  @map("max_years_exp")
+  experienceBand   String?   @map("experience_band")
+  expSource        String?   @map("exp_source")
+  tagsNorm         String[]  @default([]) @map("tags_norm")
+  fieldProvenance  Json      @default("{}") @map("field_provenance")
+  enrichedAt       DateTime? @map("enriched_at")
+  enrichmentHash   String?   @map("enrichment_hash")
 
   @@index([source])
   @@index([location])
   @@index([postedAt])
   @@index([tags], type: Gin)
   @@index([isActive, postedAt])
+  @@index([experienceBand])
+  @@index([tagsNorm], type: Gin)
   @@map("jobs")
 }
 
@@ -108,4 +120,45 @@ model AdminAuditLog {
 
   @@index([createdAt])
   @@map("admin_audit_log")
+}
+
+// First-party traffic analytics (db/migrations/0021) — apps/web writes,
+// this app reads via GET /api/analytics. traffic_source is deliberately NOT
+// jobs.source: that column is the scraper origin (internal-only), this one
+// is where the VISITOR came from (instagram, google, direct).
+model PageView {
+  id            BigInt   @id @default(autoincrement())
+  visitorId     String   @map("visitor_id") @db.Uuid
+  sessionId     String   @map("session_id") @db.Uuid
+  path          String
+  referrer      String?
+  trafficSource String   @default("direct") @map("traffic_source")
+  utmMedium     String?  @map("utm_medium")
+  utmCampaign   String?  @map("utm_campaign")
+  device        String?
+  country       String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt(sort: Desc)])
+  @@index([trafficSource, createdAt(sort: Desc)])
+  @@index([visitorId])
+  @@map("page_view")
+}
+
+// content_type/content_id mirrors DispatchLog's convention, so contest
+// clicks are covered by the same table with no schema change.
+model ApplyClick {
+  id            BigInt   @id @default(autoincrement())
+  visitorId     String   @map("visitor_id") @db.Uuid
+  sessionId     String   @map("session_id") @db.Uuid
+  contentType   String   @map("content_type")
+  contentId     String   @map("content_id") @db.Uuid
+  trafficSource String   @default("direct") @map("traffic_source")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt(sort: Desc)])
+  @@index([trafficSource, createdAt(sort: Desc)])
+  @@index([visitorId])
+  @@index([contentType, contentId])
+  @@map("apply_click")
 }

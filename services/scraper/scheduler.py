@@ -8,7 +8,15 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from dotenv import load_dotenv
 
-from db.repository import connect, get_enabled_sources, get_recent_searches, reap_expired, reap_stale, record_source_error
+from db.repository import (
+    connect,
+    get_enabled_sources,
+    get_recent_searches,
+    prune_analytics,
+    reap_expired,
+    reap_stale,
+    record_source_error,
+)
 from scrapers.base import RateLimitedError
 from scripts.run_scrape import run_source
 from taxonomy import STREAM_QUERIES
@@ -406,6 +414,19 @@ def reap_expired_jobs() -> None:
     )
 
 
+def prune_analytics_job() -> None:
+    """page_view (db/migrations/0021) is the highest-volume table in the
+    schema by a wide margin — this is what keeps it from growing forever.
+    Clicks are kept 2x longer than page views (see prune_analytics's own
+    docstring: they're the scarce, high-value signal)."""
+    conn = connect()
+    try:
+        views, clicks = prune_analytics(conn)
+    finally:
+        conn.close()
+    logger.info("Pruned %d old page_view row(s) and %d old apply_click row(s)", views, clicks)
+
+
 def main() -> None:
     load_dotenv()
     scheduler = BlockingScheduler()
@@ -426,6 +447,7 @@ def main() -> None:
     )
     scheduler.add_job(reap_stale_jobs, "interval", hours=REAP_EVERY_HOURS, next_run_time=None)
     scheduler.add_job(reap_expired_jobs, "interval", hours=REAP_EVERY_HOURS, next_run_time=None)
+    scheduler.add_job(prune_analytics_job, "interval", hours=24, next_run_time=None)
 
     logger.info(
         "Scheduler started: linkedin daily, talentd every 2 days, "

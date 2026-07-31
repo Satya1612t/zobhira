@@ -26,10 +26,12 @@ function CalendarIcon() {
 // anchor built server-side (see lib/ics.ts), so "add to calendar" needs no
 // backend endpoint or client JS of its own — only Share does.
 export function ContestDetailActions({
+  contestId,
   sourceUrl,
   icsHref,
   icsFilename,
 }: {
+  contestId: string;
   sourceUrl: string;
   icsHref: string | null;
   icsFilename: string;
@@ -56,7 +58,22 @@ export function ContestDetailActions({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary job-apply-cta">
+      <a
+        href={sourceUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="btn btn-primary job-apply-cta"
+        onClick={() =>
+          // sendBeacon survives the navigation away; a plain fetch often doesn't.
+          navigator.sendBeacon?.(
+            "/api/track",
+            new Blob(
+              [JSON.stringify({ type: "apply_click", contentType: "contest", contentId: contestId })],
+              { type: "application/json" }
+            )
+          )
+        }
+      >
         Register now
       </a>
       <div style={{ display: "flex", gap: 8 }}>

@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from db.repository import connect, flag_if_repost, mark_stale_inactive, upsert_job
 from utils.dedup import make_dedup_key
-from designation_classifier import classify_title
+from utils.field_enrichment import enrich_posting
 from scrapers.base import BaseJobScraper
 from scrapers.himalayas import HimalayasScraper
 from scrapers.linkedin import LinkedInScraper
@@ -242,15 +242,12 @@ def run_source(
     if max_results is not None and len(postings) > max_results:
         postings = postings[:max_results]
 
-    # The scheduler now searches one broad query per stream (see
-    # taxonomy.STREAM_QUERIES) instead of all 58 exact designations, so
-    # this recovers per-designation granularity from the title text for
-    # browse/filter use. Appended, not replacing, any tags a scraper
-    # already set from the source itself (e.g. Talentd's real skill tags).
+    # Designation tags, skill tags, employment type, workplace type and
+    # experience — all derived here, once, instead of at query time.
+    # `use_llm` is False on live-search calls (mark_stale=False), which are
+    # latency-sensitive; the scheduled sweep does the LLM gap-fill.
     for posting in postings:
-        for designation in classify_title(posting.title):
-            if designation not in posting.tags:
-                posting.tags.append(designation)
+        enrich_posting(posting, use_llm=mark_stale)
 
     before_mandatory = len(postings)
     postings = [p for p in postings if has_mandatory_fields(p)]

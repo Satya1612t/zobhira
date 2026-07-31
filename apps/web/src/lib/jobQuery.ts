@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { expandSkillQuery } from "@/lib/skillVocab";
 
 // Every job list/detail query in the app uses this same select — it's every
 // column except `raw` (the full scraped-page payload, which no frontend
@@ -27,21 +28,38 @@ export const JOB_SELECT = {
   logoUrl: true,
   isActive: true,
   employmentType: true,
+  // New — lets JobCard render an accurate "Fresher" / "3-5 yrs" chip from a
+  // stored value instead of re-running extractExperience() over the whole
+  // description on every render of every card.
+  experienceBand: true,
+  minYearsExp: true,
+  maxYearsExp: true,
 } satisfies Prisma.JobSelect;
 
 export type JobListItem = Prisma.JobGetPayload<{ select: typeof JOB_SELECT }>;
 
-// Default listing order: best-quality first (see the Postgres-computed
-// qualityScore column, db/migrations/0014_add_job_quality_score.sql), then
-// newest, then a stable id tiebreak. `sort=oldest` is an explicit user
-// choice to see the chronologically oldest first — qualityScore doesn't
-// override that, since the whole point of picking "oldest" is chronology,
-// not quality.
+// Default listing order: fresher-first (see the Postgres-computed
+// fresherRank column, db/migrations/0019), then best-quality (qualityScore,
+// db/migrations/0014), then newest, then a stable id tiebreak. `sort=oldest`/
+// `sort=newest` are explicit user choices to see chronology — fresherRank/
+// qualityScore don't override those, since the whole point of picking a
+// chronological sort is chronology, not audience fit.
+//
+// idx_jobs_fresher_order (migration 0019) matches this exact tuple, so this
+// is an index scan with no sort node.
 export function jobOrderBy(sort?: string): Prisma.JobOrderByWithRelationInput[] {
   if (sort === "oldest") {
     return [{ postedAt: "asc" }, { id: "desc" }];
   }
-  return [{ qualityScore: "desc" }, { postedAt: "desc" }, { id: "desc" }];
+  if (sort === "newest") {
+    return [{ postedAt: "desc" }, { id: "desc" }];
+  }
+  return [
+    { fresherRank: "asc" },
+    { qualityScore: "desc" },
+    { postedAt: "desc" },
+    { id: "desc" },
+  ];
 }
 
 export type SearchParams = {
@@ -70,15 +88,6 @@ export const ANY_LOCATION = "__any__";
 // value is needed to distinguish "user hasn't touched this" from "user
 // deliberately wants every posting regardless of age".
 export const ALL_TIME = "__all_time__";
-
-// Canonical employment-type tag values — normalized by the scraper itself
-// (services/scraper/scrapers/{linkedin,talentd}.py's
-// `.replace("-", "").replace(" ", "").capitalize()` on the source's raw
-// "full-time"/"part-time"/etc.) before ever reaching the DB, so an exact
-// (case-sensitive) Prisma `tags: { has: ... }` match against these is
-// reliable — unlike the free-text skills filter below, which can't assume
-// its input matches stored casing.
-const EMPLOYMENT_TYPE_TAGS = ["Fulltime", "Parttime", "Contract", "Internship", "Intern"];
 
 // Defaults to "past week" per the review's own reasoning ("this week" beats
 // "all" as a default) — ALL_TIME is the explicit opt-out. Unlike the other
@@ -125,6 +134,13 @@ function indiaScopeFilter(): Prisma.JobWhereInput {
 // though the same term typed into the separate "Skills" filter would find
 // it — two different keyword-matching behaviors for what a user reasonably
 // expects to be the same kind of search.
+//
+// Cap on the keyword id-list. Without a bound, a broad query ("engineer")
+// on a large table materialises every matching id in Node and sends it back
+// to Postgres as an IN list — which is how this pattern falls over. The cap
+// is well above any page size the UI requests.
+const MAX_KEYWORD_IDS = 5000;
+
 async function keywordMatchingIds(q: string): Promise<string[] | null> {
   const terms = q
     .trim()
@@ -139,7 +155,10 @@ async function keywordMatchingIds(q: string): Promise<string[] | null> {
     return Prisma.sql`(title ILIKE ${pattern} OR company ILIKE ${pattern} OR EXISTS (SELECT 1 FROM unnest(tags) AS t WHERE t ILIKE ${pattern}))`;
   });
   const rows = await prisma.$queryRaw<{ id: string }[]>(
-    Prisma.sql`SELECT id FROM jobs WHERE is_active = true AND ${Prisma.join(termConditions, " AND ")}`
+    Prisma.sql`SELECT id FROM jobs WHERE is_active = true AND ${Prisma.join(
+      termConditions,
+      " AND "
+    )} ORDER BY fresher_rank ASC, quality_score DESC LIMIT ${MAX_KEYWORD_IDS}`
   );
   return rows.map((r) => r.id);
 }
@@ -216,72 +235,75 @@ export async function suggestCorrection(q: string): Promise<string | null> {
   return match.title;
 }
 
-// "Experience level" isn't a real column — it's inferred from free-text
-// description via regex, so matching happens as a raw-SQL lookup that
-// resolves to a set of job IDs, then folds into the normal typed Prisma
-// where clause as `id: { in: [...] }`. Descriptions can be NULL now (a
-// "stub" posting whose detail-page enrichment hasn't landed yet — see
-// scripts/run_scrape.py's MANDATORY_FIELDS comment) — `~*`/`!~*`/
-// regexp_match against a NULL description all evaluate to NULL, which a
-// SQL WHERE clause treats as "no match", so a stub simply doesn't match any
-// experience-level filter rather than erroring or false-matching. Correct
-// behavior: we genuinely don't know its experience level yet.
+/** UI value -> filter. Bands are stored; year floors are also stored. */
+const EXPERIENCE_BANDS = ["fresher", "junior", "mid", "senior", "lead"] as const;
 const EXPERIENCE_MIN_YEARS: Record<string, number> = { "1+": 1, "2+": 2, "3+": 3, "5+": 5 };
 
-// Postgres regex syntax for the experience-level filter dropdown. The
-// capturing group around `\d+` is required for regexp_match(...)[1] below
-// to extract just the number — without it,
-// [1] would be the entire matched phrase (e.g. "2+ years of experience"),
-// which fails to cast to int.
-const EXPERIENCE_PATTERN = String.raw`(\d+)\+?\s*(?:-|to)?\s*\d*\+?\s*years?\s+(?:of\s+)?experience`;
+function experienceFilter(level?: string): Prisma.JobWhereInput {
+  if (!level) return {};
 
-async function experienceMatchingIds(level: string): Promise<string[] | null> {
-  if (level === "fresher") {
-    const rows = await prisma.$queryRaw<{ id: string }[]>`
-      SELECT id FROM jobs
-      WHERE is_active = true
-      AND (
-        description ~* '\yfresher\y|entry[- ]level|no experience required'
-        OR description !~* ${EXPERIENCE_PATTERN}
-      )
-    `;
-    return rows.map((r) => r.id);
+  // Band values (fresher/junior/mid/senior/lead) — an indexed equality.
+  if ((EXPERIENCE_BANDS as readonly string[]).includes(level)) {
+    // "fresher" also admits postings whose stated floor is <= 1 year even if
+    // the band landed elsewhere via the LLM pass — belt and braces on the
+    // one filter this product cannot afford to get wrong.
+    if (level === "fresher") {
+      return { OR: [{ experienceBand: "fresher" }, { minYearsExp: { lte: 1 } }] };
+    }
+    return { experienceBand: level };
   }
+
+  // Legacy "N+ years" values — kept so existing bookmarks, the footer links
+  // and any indexed URLs keep working.
   const minYears = EXPERIENCE_MIN_YEARS[level];
-  if (!minYears) return null;
-  const rows = await prisma.$queryRaw<{ id: string }[]>`
-    SELECT id FROM jobs
-    WHERE is_active = true
-    AND (regexp_match(description, ${EXPERIENCE_PATTERN}, 'i'))[1]::int >= ${minYears}
-  `;
-  return rows.map((r) => r.id);
+  if (minYears !== undefined) return { minYearsExp: { gte: minYears } };
+
+  // FIX for a live bug: /jobs?experienceLevel=senior is linked from
+  // components/home/Offers.tsx but "senior" was not in EXPERIENCE_MIN_YEARS,
+  // so experienceMatchingIds returned null and the filter was silently
+  // dropped — that CTA showed unfiltered results. It is a valid band now,
+  // handled above. Anything still unrecognised is ignored rather than
+  // producing a confusing empty page.
+  return {};
 }
 
 // Skills/tech-stack search — free text, comma-separated (e.g. "python,
-// react"), matched against ANY of a job's tags (OR, not AND — "python,
-// react" means either, not both). Unlike employmentType's exact match
-// against known-canonical values, arbitrary user-typed skill text can't
-// assume it matches stored tag casing (tags are mixed-case — "Machine
-// learning" vs "React"), so this goes through a raw ILIKE-per-tag lookup
-// (same "resolve to job IDs first" pattern as experienceMatchingIds) rather
-// than Prisma's case-sensitive-only array `hasSome`.
-async function skillsMatchingIds(rawTags: string): Promise<string[]> {
-  const patterns = rawTags
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean)
-    .map((t) => `%${t}%`);
-  if (patterns.length === 0) return [];
-  const rows = await prisma.$queryRaw<{ id: string }[]>`
-    SELECT DISTINCT j.id FROM jobs j, unnest(j.tags) AS t
-    WHERE j.is_active = true AND t ILIKE ANY(${patterns})
-  `;
-  return rows.map((r) => r.id);
+// react"), matched against ANY of a job's tags_norm (OR, not AND — "python,
+// react" means either, not both). tags_norm (migration 0019) holds
+// lowercased, alias-collapsed tags, so `hasSome` maps to the `&&`
+// array-overlap operator and hits the GIN index directly — unlike the old
+// `unnest(tags) ... ILIKE ANY(...)` lookup, which was opaque to the planner
+// and ran as a full sequential scan regardless of the GIN index on tags.
+async function skillsFilter(rawTags?: string): Promise<Prisma.JobWhereInput> {
+  if (!rawTags) return {};
+  const keys = await expandSkillQuery(rawTags);
+  if (keys.length === 0) return {};
+  return { tagsNorm: { hasSome: keys } };
+}
+
+// The old filter checked `tags: { has: "Fulltime" }` — exact and
+// case-sensitive — which failed for three of four sources: ycombinator
+// pushed the raw "Full-time" (hyphen) into tags, himalayas had the real
+// value in its employment_type column (never tags), and linkedin/talentd
+// only tagged it during detail-page enrichment, so every unenriched stub
+// failed the filter silently. Every source now writes the canonical value
+// into the indexed employment_type column
+// (services/scraper/utils/field_enrichment.py), and this ORs across both so
+// rows scraped before the backfill still match via their tag.
+const EMPLOYMENT_TYPES = ["Fulltime", "Parttime", "Contract", "Internship", "Apprenticeship"];
+
+function employmentTypeFilter(value?: string): Prisma.JobWhereInput {
+  if (!value || !EMPLOYMENT_TYPES.includes(value)) return {};
+  return { OR: [{ employmentType: value }, { tags: { has: value } }] };
 }
 
 // Shared where-clause builder for the two job-browsing pages (Jobs / Live
 // Opening) — `extra` lets a caller (like /live) bolt on an additional hard
 // constraint (e.g. postedAt >= 48h ago) without duplicating the rest.
+//
+// Only keyword search still needs the resolve-to-ids round trip (it
+// genuinely needs ILIKE across title/company/tags). Experience and skills
+// are now typed, indexed clauses.
 export async function buildJobsWhere(
   {
     q, location, workplaceType, postedWithin, experienceLevel,
@@ -293,24 +315,24 @@ export async function buildJobsWhere(
   const isAnyLocation = location === ANY_LOCATION;
   const isDefaultIndiaScope = !location && !isAnyLocation;
 
-  // All three resolve to `id: { in: [...] }` — collected into one array and
-  // merged via `AND` (rather than naively spread, which would let a later
-  // one silently clobber an earlier one under the same `id` key) so
-  // keyword/experienceLevel/skills can all be filtered on at the same time.
-  const [keywordIds, experienceIds, skillIds] = await Promise.all([
+  const [keywordIds, skillsClause] = await Promise.all([
     q ? keywordMatchingIds(q) : Promise.resolve(null),
-    experienceLevel ? experienceMatchingIds(experienceLevel) : Promise.resolve(null),
-    tags ? skillsMatchingIds(tags) : Promise.resolve(null),
+    skillsFilter(tags),
   ]);
-  const idFilters: Prisma.JobWhereInput[] = [];
-  if (keywordIds) idFilters.push({ id: { in: keywordIds } });
-  if (experienceIds) idFilters.push({ id: { in: experienceIds } });
-  if (skillIds) idFilters.push({ id: { in: skillIds } });
 
   const sourceList = Array.isArray(source) ? source : source ? [source] : [];
   const minSalary = salaryMin ? Number(salaryMin) : null;
-  const validEmploymentType =
-    employmentType && EMPLOYMENT_TYPE_TAGS.includes(employmentType) ? employmentType : null;
+
+  // Collected as an AND list so several clauses can target the same key
+  // without one silently clobbering another (the reason the original code
+  // merged id-filters explicitly rather than spreading them).
+  const and: Prisma.JobWhereInput[] = [
+    experienceFilter(experienceLevel),
+    skillsClause,
+    employmentTypeFilter(employmentType),
+  ].filter((clause) => Object.keys(clause).length > 0);
+
+  if (keywordIds) and.push({ id: { in: keywordIds } });
 
   const where: Prisma.JobWhereInput = {
     isActive: true,
@@ -322,7 +344,6 @@ export async function buildJobsWhere(
     ...(workplaceType ? { workplaceType } : {}),
     ...(postedAfter ? { postedAt: { gte: postedAfter } } : {}),
     ...(company ? { company: { contains: company, mode: "insensitive" as const } } : {}),
-    ...(validEmploymentType ? { tags: { has: validEmploymentType } } : {}),
     ...(sourceList.length ? { source: { in: sourceList } } : {}),
     // An explicit min implies "must be disclosed" too — no need for both
     // conditions when a min is set, `gte` alone already excludes NULLs.
@@ -332,9 +353,20 @@ export async function buildJobsWhere(
         ? { salaryMin: { not: null } }
         : {}),
     ...(hideIncomplete === "true" ? { description: { not: null } } : {}),
-    ...(idFilters.length === 1 ? idFilters[0] : idFilters.length > 1 ? { AND: idFilters } : {}),
+    ...(and.length ? { AND: and } : {}),
     ...(extra ?? {}),
   };
 
   return { where, isDefaultIndiaScope };
+}
+
+// jobs/[id]/page.tsx currently uses `tags: { hasSome: job.tags }`, which is
+// case-SENSITIVE — so a job tagged "Machine learning" never matches one
+// tagged "Machine Learning". Route it through tags_norm instead.
+export function relatedJobsWhere(job: { id: string; tagsNorm: string[] }): Prisma.JobWhereInput {
+  return {
+    isActive: true,
+    id: { not: job.id },
+    tagsNorm: { hasSome: job.tagsNorm },
+  };
 }

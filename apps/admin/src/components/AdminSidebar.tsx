@@ -67,6 +67,14 @@ function AuditLogIcon() {
     </svg>
   );
 }
+function AnalyticsIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3v18h18" />
+      <path d="M7 15l4-5 3 3 5-7" />
+    </svg>
+  );
+}
 
 const TABS = [
   { label: "Dashboard", href: "/dashboard", Icon: DashboardIcon, comingSoon: true },
@@ -74,6 +82,7 @@ const TABS = [
   { label: "Contests", href: "/contests", Icon: ContestsIcon },
   { label: "Scheduler", href: "/scheduler", Icon: SchedulerIcon },
   { label: "Sources", href: "/sources", Icon: SourcesIcon },
+  { label: "Analytics", href: "/analytics", Icon: AnalyticsIcon },
   { label: "Audit Log", href: "/audit-log", Icon: AuditLogIcon },
   { label: "Progress", href: "/progress", Icon: ProgressIcon, comingSoon: true },
 ];

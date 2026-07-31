@@ -306,6 +306,11 @@ class LinkedInScraper(BaseJobScraper):
             )
             employment_type = criteria.get("Employment type")
             if employment_type:
+                # Raw value goes onto the posting itself too, so
+                # utils/field_enrichment.py's canonical_employment_type() can
+                # resolve it into the indexed employment_type column —
+                # previously this only ever reached `tags`.
+                posting.employment_type = employment_type
                 normalized = employment_type.replace("-", "").replace(" ", "").capitalize()
                 if normalized and normalized not in posting.tags:
                     posting.tags.append(normalized)

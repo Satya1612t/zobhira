@@ -106,4 +106,29 @@ TECHNICAL_DESIGNATIONS: list[str] = [
     "Performance Marketing Manager",
     "Marketing Analyst",
     "Growth Marketing Manager",
+    # --- Added 2026-08: high-volume Indian-market titles the original
+    # 58-entry list had no entry for. "Software Engineer" alone is the most
+    # common technical title in the country and produced ZERO tags, because
+    # the list only had "Software Architect" plus the specific
+    # Frontend/Backend/Full-Stack roles.
+    #
+    # RULE: never include a seniority word (Senior/Junior/Associate/Lead/
+    # Trainee). role_aliases.STOP_TOKENS strips those from BOTH sides before
+    # matching, so "Associate Software Developer" tokenizes identically to
+    # "Software Developer" and every posting gets both tags.
+    "Software Engineer",
+    "Software Developer",
+    "Application Developer",
+    "Java Developer",
+    "Python Developer",
+    "Dotnet Developer",
+    "PHP Developer",
+    "Salesforce Developer",
+    "ServiceNow Developer",
+    "Business Analyst",
+    "Product Manager",
+    "Technical Support Engineer",
+    "Solution Architect",
+    "Digital Marketing Specialist",
+    "Digital Marketing Executive",
 ]

@@ -39,6 +39,15 @@ class JobPosting:
     employment_type: str | None = None
     seniority: str | None = None
     raw: dict = field(default_factory=dict)
+    # Derived at ingest by utils/field_enrichment.py::enrich_posting —
+    # never set by a scraper directly.
+    min_years_exp: float | None = None
+    max_years_exp: float | None = None
+    experience_band: str | None = None
+    exp_source: str | None = None
+    tags_norm: list[str] = field(default_factory=list)
+    field_provenance: dict = field(default_factory=dict)
+    enrichment_hash: str | None = None
 
 
 class BaseJobScraper(ABC):

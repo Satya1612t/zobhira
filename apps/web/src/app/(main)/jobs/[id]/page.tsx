@@ -7,7 +7,7 @@ import { FormattedJobDescription } from "@/components/FormattedJobDescription";
 import { JobDetailActions } from "@/components/JobDetailActions";
 import { JobGridCard } from "@/components/JobGridCard";
 import { extractTechnologies } from "@/lib/jobInsights";
-import { JOB_SELECT } from "@/lib/jobQuery";
+import { JOB_SELECT, relatedJobsWhere } from "@/lib/jobQuery";
 import { isJobId, parseListingSlug, MIN_LISTINGS_TO_INDEX } from "@/lib/designationCities";
 import { DesignationCityLanding } from "@/components/DesignationCityLanding";
 
@@ -101,7 +101,10 @@ export default async function JobDetailPage({
     return <DesignationCityLanding designation={pair.designation} city={pair.city} />;
   }
 
-  const job = await prisma.job.findUnique({ where: { id }, select: JOB_SELECT });
+  const job = await prisma.job.findUnique({
+    where: { id },
+    select: { ...JOB_SELECT, tagsNorm: true },
+  });
 
   if (!job) notFound();
 
@@ -111,15 +114,16 @@ export default async function JobDetailPage({
   const daysLeft = job.deadlineAt ? daysUntil(job.deadlineAt) : null;
   const showUrgency = daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
 
-  // "Similar" = shares at least one tag (designation/skill) with this job,
-  // same recency ordering as everywhere else. No tags at all means no
-  // similarity signal to go on, so the section is simply skipped rather
+  // "Similar" = shares at least one normalized tag (designation/skill) with
+  // this job, same recency ordering as everywhere else. No tags at all means
+  // no similarity signal to go on, so the section is simply skipped rather
   // than falling back to an arbitrary "recent jobs" list that wouldn't
-  // actually be similar.
+  // actually be similar. Routed through tagsNorm (not the case-sensitive
+  // `tags`) so e.g. "Machine learning" and "Machine Learning" match.
   const similarJobs =
-    job.tags.length > 0
+    job.tagsNorm.length > 0
       ? await prisma.job.findMany({
-          where: { isActive: true, id: { not: job.id }, tags: { hasSome: job.tags } },
+          where: relatedJobsWhere(job),
           orderBy: { postedAt: "desc" },
           take: 4,
           select: JOB_SELECT,
@@ -296,7 +300,7 @@ export default async function JobDetailPage({
                   Closes in {daysLeft === 0 ? "today" : `${daysLeft} day${daysLeft === 1 ? "" : "s"}`}
                 </div>
               )}
-              <JobDetailActions sourceUrl={job.sourceUrl} title={job.title} />
+              <JobDetailActions jobId={job.id} sourceUrl={job.sourceUrl} title={job.title} />
               <div className="job-facts-table">
                 <div>
                   <span>Location</span>
@@ -364,7 +368,7 @@ export default async function JobDetailPage({
       </div>
 
       <div className="job-mobile-apply-bar">
-        <JobDetailActions sourceUrl={job.sourceUrl} />
+        <JobDetailActions jobId={job.id} sourceUrl={job.sourceUrl} />
       </div>
     </main>
   );

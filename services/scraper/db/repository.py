@@ -12,13 +12,15 @@ INSERT INTO jobs (
     dedup_key, title, company, location, workplace_type,
     salary_min, salary_max, salary_currency,
     source, source_url, description, tags, posted_at, deadline_at, logo_url,
-    last_scraped_at, is_active, extraction_method, employment_type, seniority, raw
+    last_scraped_at, is_active, extraction_method, employment_type, seniority, raw,
+    min_years_exp, max_years_exp, experience_band, exp_source, tags_norm, field_provenance, enrichment_hash, enriched_at
 )
 VALUES (
     %(dedup_key)s, %(title)s, %(company)s, %(location)s, %(workplace_type)s,
     %(salary_min)s, %(salary_max)s, %(salary_currency)s,
     %(source)s, %(source_url)s, %(description)s, %(tags)s, %(posted_at)s, %(deadline_at)s, %(logo_url)s,
-    now(), true, %(extraction_method)s, %(employment_type)s, %(seniority)s, %(raw)s
+    now(), true, %(extraction_method)s, %(employment_type)s, %(seniority)s, %(raw)s,
+    %(min_years_exp)s, %(max_years_exp)s, %(experience_band)s, %(exp_source)s, %(tags_norm)s, %(field_provenance)s, %(enrichment_hash)s, now()
 )
 ON CONFLICT (dedup_key) DO UPDATE SET
     last_scraped_at = now(),
@@ -43,7 +45,22 @@ ON CONFLICT (dedup_key) DO UPDATE SET
     deadline_at = EXCLUDED.deadline_at,
     logo_url = COALESCE(EXCLUDED.logo_url, jobs.logo_url),
     extraction_method = EXCLUDED.extraction_method,
-    raw = COALESCE(jobs.raw, '{}'::jsonb) || COALESCE(EXCLUDED.raw, '{}'::jsonb);
+    raw = COALESCE(jobs.raw, '{}'::jsonb) || COALESCE(EXCLUDED.raw, '{}'::jsonb),
+    -- Same COALESCE discipline as description/logo_url above: a re-scrape
+    -- that skipped enrichment must not wipe a previously-enriched row back
+    -- to nulls.
+    min_years_exp    = COALESCE(EXCLUDED.min_years_exp, jobs.min_years_exp),
+    max_years_exp    = COALESCE(EXCLUDED.max_years_exp, jobs.max_years_exp),
+    experience_band  = CASE WHEN EXCLUDED.experience_band IS NOT NULL
+                             AND EXCLUDED.experience_band <> 'unknown'
+                        THEN EXCLUDED.experience_band ELSE jobs.experience_band END,
+    exp_source       = COALESCE(EXCLUDED.exp_source, jobs.exp_source),
+    tags_norm        = CASE WHEN cardinality(EXCLUDED.tags_norm) > 0
+                        THEN EXCLUDED.tags_norm ELSE jobs.tags_norm END,
+    field_provenance = COALESCE(jobs.field_provenance,'{}'::jsonb)
+                       || COALESCE(EXCLUDED.field_provenance,'{}'::jsonb),
+    enrichment_hash  = COALESCE(EXCLUDED.enrichment_hash, jobs.enrichment_hash),
+    enriched_at      = now();
 """
 
 _EXISTS_BY_DEDUP_KEY_SQL = "SELECT EXISTS (SELECT 1 FROM jobs WHERE dedup_key = %(dedup_key)s) AS found;"
@@ -155,6 +172,13 @@ def upsert_job(conn: psycopg.Connection, posting: JobPosting) -> bool:
                 "employment_type": posting.employment_type,
                 "seniority": posting.seniority,
                 "raw": psycopg.types.json.Json(posting.raw),
+                "min_years_exp": posting.min_years_exp,
+                "max_years_exp": posting.max_years_exp,
+                "experience_band": posting.experience_band,
+                "exp_source": posting.exp_source,
+                "tags_norm": posting.tags_norm,
+                "field_provenance": psycopg.types.json.Json(posting.field_provenance),
+                "enrichment_hash": posting.enrichment_hash,
             },
         )
     return True
@@ -480,3 +504,26 @@ def cache_domain(conn: psycopg.Connection, company_key: str, domain: str | None)
             {"company": company_key, "domain": domain},
         )
     conn.commit()
+
+
+def prune_analytics(conn: psycopg.Connection, page_view_days: int = 180, click_days: int = 365) -> tuple[int, int]:
+    """Drop raw analytics rows (db/migrations/0021) past their retention
+    window. Commits itself — called from its own scheduled job, not part of
+    a shared batch transaction.
+
+    Clicks are kept longer than page views deliberately — they're the scarce,
+    high-value signal, and the table is a fraction of the size.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM page_view WHERE created_at < now() - make_interval(days => %s)",
+            (page_view_days,),
+        )
+        views = cur.rowcount
+        cur.execute(
+            "DELETE FROM apply_click WHERE created_at < now() - make_interval(days => %s)",
+            (click_days,),
+        )
+        clicks = cur.rowcount
+    conn.commit()
+    return views, clicks

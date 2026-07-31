@@ -15,6 +15,7 @@ import {
   JOB_SELECT,
   type SearchParams,
 } from "@/lib/jobQuery";
+import { recordSkillMisses } from "@/lib/skillVocab";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +79,11 @@ export default async function JobsPage({
 
   const suggestion = q && filteredJobs.length === 0 ? await suggestCorrection(q) : null;
   const zeroFilteredResults = filteredJobs.length === 0;
+
+  // Fire-and-forget — a zero-result skill search is the strongest signal the
+  // vocabulary miner gets about what it's missing (see
+  // scripts/mine_skills.py). Never awaited into the response path.
+  if (tags && zeroFilteredResults) void recordSkillMisses(tags);
 
   const jsonLd = jobs.length > 0 ? {
     "@context": "https://schema.org",

@@ -223,6 +223,7 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
                 </div>
               )}
               <ContestDetailActions
+                contestId={contest.id}
                 sourceUrl={contest.sourceUrl}
                 icsHref={icsHref}
                 icsFilename={`${contest.title.slice(0, 40).replace(/[^a-z0-9]+/gi, "-")}.ics`}
@@ -242,6 +243,7 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
           mobile; without it the CTA would simply disappear there. */}
       <div className="job-mobile-apply-bar">
         <ContestDetailActions
+          contestId={contest.id}
           sourceUrl={contest.sourceUrl}
           icsHref={null}
           icsFilename=""

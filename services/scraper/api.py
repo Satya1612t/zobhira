@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 import contest_scheduler
 import scheduler
+import skill_miner_scheduler
 from db.repository import connect, flag_if_repost, get_job, update_job_formatting, upsert_job
 from scripts.run_scrape import (
     REPOST_THRESHOLD,
@@ -58,6 +59,7 @@ def _start_background_scheduler() -> None:
     )
     bg.add_job(scheduler.reap_stale_jobs, "interval", hours=scheduler.REAP_EVERY_HOURS, next_run_time=None)
     bg.add_job(scheduler.reap_expired_jobs, "interval", hours=scheduler.REAP_EVERY_HOURS, next_run_time=None)
+    bg.add_job(scheduler.prune_analytics_job, "interval", hours=24, next_run_time=None)
     bg.start()
     logger.info(
         "Background scheduler started: linkedin daily, talentd every 2 "
@@ -99,6 +101,37 @@ def trigger_contest_scheduler(source: str):
     started = contest_scheduler.trigger_contest(source)
     if not started:
         return {"started": False, "reason": "a contest sweep is already running"}
+    return {"started": True}
+
+
+@app.on_event("startup")
+def _start_skill_miner_scheduler() -> None:
+    """A THIRD, separate BackgroundScheduler/lock (see
+    skill_miner_scheduler.py) — mining is a DB scan + a handful of small
+    writes to the skill_* tables, not a Playwright-driven sweep, so it has
+    no contention reason to share a lock with either scraper scheduler.
+    Sunday 04:00 local — after both scrapers' 02:00/03:00 runs, so the
+    week's freshest descriptions are in `jobs` before the scan."""
+    bg = BackgroundScheduler()
+    bg.add_job(
+        skill_miner_scheduler.mine_skills_weekly,
+        CronTrigger(day_of_week="sun", hour=4, minute=0),
+        max_instances=1, coalesce=True,
+    )
+    bg.start()
+    logger.info("Skill miner scheduler started: weekly, Sunday 04:00 local")
+
+
+@app.get("/skills/miner/progress")
+def get_skill_miner_progress():
+    return skill_miner_scheduler.get_progress()
+
+
+@app.post("/skills/miner/trigger")
+def trigger_skill_miner():
+    started = skill_miner_scheduler.trigger()
+    if not started:
+        return {"started": False, "reason": "a mining run is already in progress"}
     return {"started": True}
 
 

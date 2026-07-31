@@ -26,7 +26,15 @@ function ShareIcon() {
 // Save state is local/cosmetic — no backend to persist it yet (see
 // /DESIGN.md). "Apply now," never "Apply on company site" — the latter
 // hints at where the listing came from, which stays a filter field only.
-export function JobDetailActions({ sourceUrl, title }: { sourceUrl: string; title?: string }) {
+export function JobDetailActions({
+  jobId,
+  sourceUrl,
+  title,
+}: {
+  jobId: string;
+  sourceUrl: string;
+  title?: string;
+}) {
   const [saved, setSaved] = useState(false);
   const [shared, setShared] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -56,6 +64,15 @@ export function JobDetailActions({ sourceUrl, title }: { sourceUrl: string; titl
         target="_blank"
         rel="noopener noreferrer"
         className="btn btn-primary job-apply-cta"
+        onClick={() =>
+          // sendBeacon survives the navigation away; a plain fetch often doesn't.
+          navigator.sendBeacon?.(
+            "/api/track",
+            new Blob([JSON.stringify({ type: "apply_click", contentType: "job", contentId: jobId })], {
+              type: "application/json",
+            })
+          )
+        }
       >
         Apply now
         <ExternalLinkIcon />

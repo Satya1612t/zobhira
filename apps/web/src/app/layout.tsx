@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { Suspense } from "react";
 import { Fraunces, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import "../styles/shapes.css";
 import { ToastProvider } from "@/components/ui/Toast";
+import { Analytics } from "@/components/Analytics";
 
 // "Editorial Signal" design language (see /DESIGN.md) — Fraunces (optical
 // serif) for display/headings, Plus Jakarta Sans for body/UI, JetBrains Mono
@@ -61,6 +63,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             directly: portaling straight into document.body inserts a live
             extra child mid-hydration and trips a hydration mismatch. */}
         <div id="toast-root" />
+        {/* First-party page-view tracking (see db/migrations/0021). In
+            Suspense because useSearchParams would otherwise de-opt this
+            layout from static rendering site-wide. */}
+        <Suspense fallback={null}>
+          <Analytics />
+        </Suspense>
       </body>
     </html>
   );

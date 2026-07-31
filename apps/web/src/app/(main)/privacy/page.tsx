@@ -9,6 +9,7 @@ export const metadata: Metadata = {
 const TOC: TocEntry[] = [
   { id: "what-we-collect", label: "What we collect" },
   { id: "what-we-dont-collect", label: "What we don't collect" },
+  { id: "cookies", label: "Cookies we set" },
   { id: "listing-data", label: "Listing data" },
   { id: "how-we-use-it", label: "How we use it" },
   { id: "retention", label: "Data retention" },
@@ -21,6 +22,7 @@ const DATA_TABLE = [
   { category: "Search activity", usedFor: "Show your \"Recent searches\" panel", retention: "Until you clear it" },
   { category: "Account information", usedFor: "Save roles, sync your applications", retention: "Until account deletion" },
   { category: "Contact form submissions", usedFor: "Respond to your message", retention: "As long as needed to respond" },
+  { category: "Anonymous visit identifier", usedFor: "Count visitors and see which listings get opened", retention: "6 months" },
 ];
 
 export default function PrivacyPage() {
@@ -57,6 +59,9 @@ export default function PrivacyPage() {
         <h2 id="what-we-dont-collect" className="prose-h2">2. What we don&apos;t collect</h2>
         <p>We don&apos;t track you across other websites, sell your data to third parties, or run advertising trackers on this site.</p>
 
+        <h2 id="cookies" className="prose-h2">3. Cookies we set</h2>
+        <p>We store a random identifier in your browser so we can count how many people visit and which listings get opened. It isn&apos;t tied to your name or email, we don&apos;t share it, and it&apos;s deleted after six months. Clearing your cookies removes it.</p>
+
         <div className="prose-table-wrap">
           <table className="prose-table">
             <thead>
@@ -78,22 +83,22 @@ export default function PrivacyPage() {
           </table>
         </div>
 
-        <h2 id="listing-data" className="prose-h2">3. Job and contest data</h2>
+        <h2 id="listing-data" className="prose-h2">4. Job and contest data</h2>
         <p>Listings shown on Zobhira are checked and updated on a recurring schedule. This data belongs to the original poster. Zobhira displays it to help you find it faster and does not alter its substance. We link back to the original listing wherever one is available.</p>
 
-        <h2 id="how-we-use-it" className="prose-h2">4. How we use what we collect</h2>
+        <h2 id="how-we-use-it" className="prose-h2">5. How we use what we collect</h2>
         <p>Solely to run the platform: showing your recent searches back to you, keeping your account and saved roles in sync, and responding when you contact us. We don&apos;t use your information for anything beyond that.</p>
 
-        <h2 id="retention" className="prose-h2">5. Data retention</h2>
+        <h2 id="retention" className="prose-h2">6. Data retention</h2>
         <p>Search history and account data are kept for as long as your account is active. You can request deletion at any time using the contact details below.</p>
 
-        <h2 id="children" className="prose-h2">6. Children&apos;s privacy</h2>
+        <h2 id="children" className="prose-h2">7. Children&apos;s privacy</h2>
         <p>Zobhira is built for students and working professionals and is not directed at children under 13. We don&apos;t knowingly collect information from children under 13.</p>
 
-        <h2 id="changes" className="prose-h2">7. Changes to this policy</h2>
+        <h2 id="changes" className="prose-h2">8. Changes to this policy</h2>
         <p>If how we handle your data changes, we&apos;ll update this page and change the date above.</p>
 
-        <h2 id="contact" className="prose-h2">8. Contact us</h2>
+        <h2 id="contact" className="prose-h2">9. Contact us</h2>
         <p>Questions about this policy or your data can be sent to us at our Indore office, by phone, or by email:</p>
         <p style={{ margin: 0 }}>
           Zobhira, Vijay Nagar, Indore, Madhya Pradesh, India
