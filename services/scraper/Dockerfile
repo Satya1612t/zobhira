@@ -6,7 +6,7 @@ COPY scrapers ./scrapers
 COPY db ./db
 COPY utils ./utils
 COPY scripts ./scripts
-COPY api.py scheduler.py contest_scheduler.py designation_classifier.py taxonomy.py ./
+COPY api.py scheduler.py contest_scheduler.py skill_miner_scheduler.py designation_classifier.py taxonomy.py role_aliases.py ./
 
 RUN pip install --no-cache-dir -e .
 # Installs Chromium plus every OS-level dependency it needs in one step
