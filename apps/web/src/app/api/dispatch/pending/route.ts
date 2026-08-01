@@ -40,14 +40,18 @@ type JobRow = {
   company: string;
   location: string | null;
   workplaceType: string;
+  employmentType: string | null;
   salaryMin: string | null;
   salaryMax: string | null;
   salaryCurrency: string | null;
   sourceUrl: string;
   description: string | null;
   formattedDescription: string | null;
+  highlights: string[];
+  logoUrl: string | null;
   tags: string[];
   postedAt: Date | null;
+  deadlineAt: Date | null;
   source: string;
 };
 
@@ -89,10 +93,12 @@ async function selectJobBatch(platform: string, batchSize: number): Promise<JobR
   if (batchSize <= 0) return [];
   return prisma.$queryRaw<JobRow[]>`
     SELECT j.id, j.title, j.company, j.location, j.workplace_type AS "workplaceType",
+           j.employment_type AS "employmentType",
            j.salary_min AS "salaryMin", j.salary_max AS "salaryMax",
            j.salary_currency AS "salaryCurrency", j.source_url AS "sourceUrl",
            j.description, j.formatted_description AS "formattedDescription",
-           j.tags, j.posted_at AS "postedAt", j.source
+           j.highlights, j.logo_url AS "logoUrl",
+           j.tags, j.posted_at AS "postedAt", j.deadline_at AS "deadlineAt", j.source
     FROM jobs j
     WHERE j.is_active = true AND j.source IN (${Prisma.join(SOURCE_ROTATION)})
       ${FRESHER_FILTER}
@@ -139,7 +145,9 @@ export async function GET(request: NextRequest) {
       return {
         job,
         text,
-        skills: extractTechnologies(job.formattedDescription, job.description).slice(0, 6),
+        // Capped at 8, not 6 — the Telegram templates want a fuller skills
+        // list than the site's own job card badges do.
+        skills: extractTechnologies(job.formattedDescription, job.description).slice(0, 8),
         experience: extractExperience(job.formattedDescription, job.description),
         email: extractEmail(job.formattedDescription, job.description),
       };
@@ -152,11 +160,25 @@ export async function GET(request: NextRequest) {
     base.forEach((b, i) => {
       const fallback = inferred[i];
       if (!fallback) return;
-      if (b.skills.length === 0) b.skills = fallback.skills.slice(0, 6);
+      if (b.skills.length === 0) b.skills = fallback.skills.slice(0, 8);
       if (b.experience === null) b.experience = fallback.experience;
     });
 
-    for (const { job, skills, experience, email } of base) {
+    for (const { job, skills, experience, email, text } of base) {
+      // First couple of real sentences, not the whole description — a short
+      // "what you'll actually do" snippet for templates that want 1-2 lines
+      // of role description rather than the full structured breakdown
+      // (which is already covered by highlights/skills separately).
+      const descriptionSnippet = text
+        ? text
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .slice(0, 2)
+            .join(" ")
+            .slice(0, 220)
+        : null;
+
       items.push({
         contentType: "job",
         id: job.id,
@@ -165,6 +187,7 @@ export async function GET(request: NextRequest) {
         company: job.company,
         location: job.location,
         workplaceType: job.workplaceType,
+        employmentType: job.employmentType,
         salaryMin: job.salaryMin,
         salaryMax: job.salaryMax,
         salaryCurrency: job.salaryCurrency,
@@ -173,8 +196,15 @@ export async function GET(request: NextRequest) {
         skills,
         experience,
         email,
+        // Up to 3 — matches every template's "Key Highlights/Responsibilities"
+        // cap. Already LLM-generated at scrape time (see job_formatter.py),
+        // not recomputed here.
+        highlights: job.highlights.slice(0, 3),
+        logoUrl: job.logoUrl,
+        descriptionSnippet,
         detailUrl: `${SITE_ORIGIN}/jobs/${job.id}`,
         postedAt: job.postedAt,
+        deadlineAt: job.deadlineAt,
       });
     }
   }
