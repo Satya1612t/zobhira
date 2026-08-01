@@ -22,11 +22,18 @@ const BATCH_SIZE = 2;
 // db/migrations/0016_remove_remoteok_source.sql) — its real application
 // link is gated behind a mandatory account signup for most listings, not
 // something a Telegram-dispatched post can send anyone to directly.
-const SOURCE_ROTATION = ["linkedin", "ycombinator", "talentd"];
+//
+// Himalayas was deliberately excluded here previously — see CLAUDE.md's
+// "Himalayas attribution conflict" note (its terms document an attribution
+// obligation apps/web has never implemented). Included now regardless, per
+// an explicit call to accept that gap rather than sit on zero fresher
+// candidates from the other three sources.
+const SOURCE_ROTATION = ["linkedin", "ycombinator", "talentd", "himalayas"];
 const SOURCE_DAILY_QUOTA: Record<string, number> = {
   linkedin: 20,
   ycombinator: 2,
   talentd: 5,
+  himalayas: 5,
 };
 
 type JobRow = {
@@ -110,7 +117,7 @@ async function fetchCandidates(source: string, platform: string, limit: number):
     `;
   }
 
-  // YCombinator / Talentd: newest unposted first.
+  // YCombinator / Talentd / Himalayas: newest unposted first.
   return prisma.$queryRaw<JobRow[]>`
     SELECT j.id, j.title, j.company, j.location, j.workplace_type AS "workplaceType",
            j.salary_min AS "salaryMin", j.salary_max AS "salaryMax",
