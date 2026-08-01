@@ -6,7 +6,7 @@ import { CompanyLogo } from "@/components/CompanyLogo";
 import { FormattedJobDescription } from "@/components/FormattedJobDescription";
 import { JobDetailActions } from "@/components/JobDetailActions";
 import { JobGridCard } from "@/components/JobGridCard";
-import { extractTechnologies } from "@/lib/jobInsights";
+import { humanizeHighlight } from "@/lib/jobInsights";
 import { JOB_SELECT, relatedJobsWhere } from "@/lib/jobQuery";
 import { isJobId, parseListingSlug, MIN_LISTINGS_TO_INDEX } from "@/lib/designationCities";
 import { DesignationCityLanding } from "@/components/DesignationCityLanding";
@@ -69,9 +69,12 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
 
   const job = await prisma.job.findUnique({
     where: { id: params.id },
-    select: { title: true, company: true, location: true, description: true },
+    select: { title: true, company: true, location: true, description: true, formattedDescription: true },
   });
-  if (!job) return { title: "Job not found" };
+  // Unformatted jobs aren't publicly visible yet (see the matching
+  // notFound() below and jobQuery.ts's formattedDescription filter) —
+  // treat the same as "job not found" for metadata purposes too.
+  if (!job || !job.formattedDescription) return { title: "Job not found" };
   const title = `${job.title} at ${job.company}${job.location ? ` in ${job.location}` : ""}`;
   return {
     title,
@@ -107,9 +110,13 @@ export default async function JobDetailPage({
   });
 
   if (!job) notFound();
+  // A job isn't publicly viewable until scrape-time LLM formatting has run
+  // on it (see services/scraper/utils/job_formatter.py) — same invariant
+  // jobQuery.ts's listing filter enforces, so a direct/shared link can't
+  // reach a job the listing would never have surfaced.
+  if (!job.formattedDescription) notFound();
 
   const salary = formatSalary(job);
-  const technologies = extractTechnologies(job.description);
   const isFresh = job.postedAt ? Date.now() - job.postedAt.getTime() < 48 * 60 * 60 * 1000 : false;
   const daysLeft = job.deadlineAt ? daysUntil(job.deadlineAt) : null;
   const showUrgency = daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
@@ -238,32 +245,31 @@ export default async function JobDetailPage({
       <div className="container" style={{ paddingBottom: 40 }}>
         <div className="job-detail-layout">
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            {(job.tags.length > 0 || technologies.length > 0) && (
+            {job.tags.length > 0 && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
-                {job.tags.length > 0 && (
-                  <div className="job-card" style={{ padding: 24 }}>
-                    <h3 style={{ margin: "0 0 12px", fontFamily: "var(--font-mono)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--ink-faint)" }}>
-                      Role tags
-                    </h3>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {job.tags.map((tag) => (
-                        <span key={tag} className="tag tag-accent">{tag}</span>
-                      ))}
-                    </div>
+                <div className="job-card" style={{ padding: 24 }}>
+                  <h3 style={{ margin: "0 0 12px", fontFamily: "var(--font-mono)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--ink-faint)" }}>
+                    Skill Required
+                  </h3>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {job.tags.map((tag) => (
+                      <span key={tag} className="tag tag-accent">{tag}</span>
+                    ))}
                   </div>
-                )}
-                {technologies.length > 0 && (
-                  <div className="job-card" style={{ padding: 24 }}>
-                    <h3 style={{ margin: "0 0 12px", fontFamily: "var(--font-mono)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--ink-faint)" }}>
-                      Tech stack mentioned
-                    </h3>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {technologies.map((tech) => (
-                        <span key={tech} className="tag tag-outline">{tech}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                </div>
+              </div>
+            )}
+
+            {job.highlights.length > 0 && (
+              <div className="job-card" style={{ padding: 28 }}>
+                <h2 style={{ margin: 0, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-xl)", color: "var(--color-text)" }}>
+                  Key highlights
+                </h2>
+                <ul className="job-desc-highlight-list" style={{ marginTop: 26, paddingTop: 22, borderTop: "1px solid var(--line)" }}>
+                  {job.highlights.map((highlight) => (
+                    <li key={highlight}>{humanizeHighlight(highlight)}</li>
+                  ))}
+                </ul>
               </div>
             )}
 
@@ -275,7 +281,6 @@ export default async function JobDetailPage({
                 jobId={job.id}
                 description={job.description}
                 formattedDescription={job.formattedDescription}
-                highlights={job.highlights}
               />
             </div>
 

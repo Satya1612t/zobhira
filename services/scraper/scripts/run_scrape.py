@@ -5,15 +5,24 @@ from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
 
-from db.repository import connect, flag_if_repost, mark_stale_inactive, upsert_job
+from db.repository import connect, flag_if_repost, mark_stale_inactive, update_job_formatting, upsert_job
 from utils.dedup import make_dedup_key
 from utils.field_enrichment import enrich_posting
+from utils.job_formatter import BREAKER_THRESHOLD, format_job_description, format_posting_with_breaker
 from scrapers.base import BaseJobScraper
 from scrapers.himalayas import HimalayasScraper
 from scrapers.linkedin import LinkedInScraper
 from scrapers.talentd import TalentdScraper
 from scrapers.ycombinator import YCombinatorScraper
 from utils.logo_lookup import find_logo_url
+
+# Small, per-source, per-run batch of previously-saved jobs still missing
+# formatted_description (left NULL by a tripped circuit breaker on some
+# earlier run) that also get a formatting retry each time this source is
+# scraped — see run_source()'s tail. Deliberately small: this piggybacks
+# the existing scrape schedule rather than a dedicated backfill cron, so it
+# shouldn't dominate a run's LLM call budget.
+BACKFILL_BATCH_SIZE = 10
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -281,6 +290,21 @@ def run_source(
     for posting in postings:
         flag_staffing_agency(posting)
 
+    # Scrape-time LLM formatting — runs before upsert so formatted_description/
+    # highlights ride along in the same INSERT/UPDATE as everything else,
+    # no extra per-posting DB round-trip. breaker_state is local to this one
+    # run_source() call: after enough consecutive total-provider failures,
+    # remaining postings (and the backfill batch below) are skipped and just
+    # saved unformatted, to be picked up by a later sweep once quota resets.
+    breaker_state = {"consecutive_failures": 0, "tripped": False}
+    for posting in postings:
+        format_posting_with_breaker(posting, breaker_state)
+    if breaker_state["tripped"]:
+        logger.warning(
+            "Formatting circuit breaker tripped for %s; remaining postings saved unformatted",
+            source,
+        )
+
     conn = connect()
     saved = 0
     repost_cutoff = run_started_at - timedelta(days=REPOST_WINDOW_DAYS)
@@ -310,6 +334,36 @@ def run_source(
             )
         if mark_stale:
             mark_stale_inactive(conn, source=source, cutoff=run_started_at - timedelta(minutes=1))
+
+        # Backfill: retry formatting for this source's own existing jobs
+        # still missing it (left NULL by a past run's tripped breaker), on
+        # every scheduled scrape of this source — not a separate cron. Skips
+        # entirely if this run's own breaker is already tripped, to avoid
+        # immediately re-hammering a quota that just failed.
+        if not breaker_state["tripped"]:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, description FROM jobs WHERE source = %(source)s AND is_active = true "
+                    "AND formatted_description IS NULL AND description IS NOT NULL "
+                    "ORDER BY last_scraped_at DESC LIMIT %(limit)s",
+                    {"source": source, "limit": BACKFILL_BATCH_SIZE},
+                )
+                backfill_rows = cur.fetchall()
+            backfilled = 0
+            for row in backfill_rows:
+                if breaker_state["tripped"]:
+                    break
+                result = format_job_description(row["description"])
+                if not result["llm_used"]:
+                    breaker_state["consecutive_failures"] += 1
+                    if breaker_state["consecutive_failures"] >= BREAKER_THRESHOLD:
+                        breaker_state["tripped"] = True
+                    continue
+                breaker_state["consecutive_failures"] = 0
+                update_job_formatting(conn, row["id"], result["formatted_description"], result["highlights"])
+                backfilled += 1
+            if backfilled:
+                logger.info("Backfilled formatted_description for %d previously-unformatted %s jobs", backfilled, source)
     finally:
         conn.close()
 

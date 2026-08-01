@@ -31,6 +31,7 @@ function reviveDates(job: JobListItem): JobListItem {
     ...job,
     postedAt: job.postedAt ? new Date(job.postedAt) : null,
     deadlineAt: job.deadlineAt ? new Date(job.deadlineAt) : null,
+    firstSeenAt: new Date(job.firstSeenAt),
   };
 }
 

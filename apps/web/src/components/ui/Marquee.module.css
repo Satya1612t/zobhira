@@ -9,6 +9,10 @@
   animation-name: scroll;
   animation-timing-function: linear;
   animation-iteration-count: infinite;
+  /* Hints the browser to put this on its own compositor layer up front,
+     instead of deciding mid-scroll — avoids a layer-promotion repaint
+     competing with scroll on lower-end devices. */
+  will-change: transform;
 }
 
 .viewport:hover .track {

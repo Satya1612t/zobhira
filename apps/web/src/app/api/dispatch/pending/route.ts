@@ -2,22 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireDispatchKey } from "@/lib/dispatchAuth";
-import { extractTechnologies, extractExperience, extractEmail } from "@/lib/jobInsights";
+import { extractTechnologies, extractExperience, extractEmail, flattenFormatted } from "@/lib/jobInsights";
 import { inferJobSignals } from "@/lib/dispatchLlm";
+import { SHOW_UNRELEASED_NAV } from "@/lib/authNavFlags";
 
 const VALID_PLATFORMS = ["telegram", "whatsapp", "instagram", "youtube"];
 const SITE_ORIGIN = "https://zobhira.com";
 
-// "We can share 2 posts at a time" — a single combined cap per call, drawn
-// from whichever sources still have daily quota left, not 2-per-source.
+// "We can share 2 posts at a time" — a single combined cap per call.
 // Applies independently to jobs and contests.
 const BATCH_SIZE = 2;
 
-// Fixed rotation order the round-robin below walks each call — with a
-// per-call cap of 2, this just means "whichever of these, in this order,
-// have quota + a pending item" wins the two slots; it's not meant to
-// starve later sources, since BATCH_SIZE(2) << the daily quotas summed
-// across many calls a day.
+// Sources eligible for dispatch — selectJobBatch() below pools all of them
+// together and ranks purely by recency (no per-source quota, no fixed
+// rotation order — the freshest eligible job across any of these wins a
+// slot, regardless of which one it's from).
 // RemoteOK removed as a source entirely (see
 // db/migrations/0016_remove_remoteok_source.sql) — its real application
 // link is gated behind a mandatory account signup for most listings, not
@@ -28,13 +27,12 @@ const BATCH_SIZE = 2;
 // obligation apps/web has never implemented). Included now regardless, per
 // an explicit call to accept that gap rather than sit on zero fresher
 // candidates from the other three sources.
-const SOURCE_ROTATION = ["linkedin", "ycombinator", "talentd", "himalayas"];
-const SOURCE_DAILY_QUOTA: Record<string, number> = {
-  linkedin: 20,
-  ycombinator: 2,
-  talentd: 5,
-  himalayas: 5,
-};
+//
+// YCombinator excluded from Telegram dispatch — its postings never carry a
+// real `posted_at` (that source doesn't expose one; see jobInsights/dispatch
+// discussion), so "newest first" for YC is only ever scrape-date ordering,
+// not genuine posting recency.
+const SOURCE_ROTATION = ["linkedin", "talentd", "himalayas"];
 
 type JobRow = {
   id: string;
@@ -47,6 +45,7 @@ type JobRow = {
   salaryCurrency: string | null;
   sourceUrl: string;
   description: string | null;
+  formattedDescription: string | null;
   tags: string[];
   postedAt: Date | null;
   source: string;
@@ -67,101 +66,45 @@ type ContestRow = {
   deadlineAt: Date | null;
 };
 
-// How many of today's (IST) telegram posts came from each source, so we know
-// how much of each source's daily quota is left. IST, not UTC, because the
-// audience/quota framing ("India", "same day") is IST-local.
-async function getPostedTodayCounts(platform: string): Promise<Record<string, number>> {
-  const rows = await prisma.$queryRaw<{ source: string; count: bigint }[]>`
-    SELECT j.source, count(*)::int AS count
-    FROM dispatch_log d
-    JOIN jobs j ON j.id = d.content_id
-    WHERE d.content_type = 'job' AND d.platform = ${platform} AND d.posted_at IS NOT NULL
-      AND (d.posted_at AT TIME ZONE 'Asia/Kolkata')::date = (now() AT TIME ZONE 'Asia/Kolkata')::date
-    GROUP BY j.source
-  `;
-  const counts: Record<string, number> = {};
-  for (const row of rows) counts[row.source] = Number(row.count);
-  return counts;
-}
-
 // Fresher-only for now (0-1 yr, per experience_band/min_years_exp from
 // services/scraper/utils/field_enrichment.py) — a job with no classified
 // experience at all is excluded rather than assumed fresher-friendly, since
 // we genuinely don't know.
 const FRESHER_FILTER = Prisma.sql`AND (j.experience_band = 'fresher' OR j.min_years_exp <= 1)`;
 
-async function fetchCandidates(source: string, platform: string, limit: number): Promise<JobRow[]> {
-  if (limit <= 0) return [];
+// A job isn't publicly viewable until scrape-time LLM formatting has run on
+// it (see services/scraper/utils/job_formatter.py and jobQuery.ts's
+// matching listing filter) — dispatching a link to Telegram for a job whose
+// detail page would 404 is worse than just waiting for the next batch.
+const FORMATTED_FILTER = Prisma.sql`AND j.formatted_description IS NOT NULL`;
 
-  if (source === "linkedin") {
-    // LinkedIn: same-(IST)-day postings only, newest first — same ordering
-    // every other source uses now (latest jobs only, not ranked by
-    // completeness).
-    return prisma.$queryRaw<JobRow[]>`
-      SELECT j.id, j.title, j.company, j.location, j.workplace_type AS "workplaceType",
-             j.salary_min AS "salaryMin", j.salary_max AS "salaryMax",
-             j.salary_currency AS "salaryCurrency", j.source_url AS "sourceUrl",
-             j.description, j.tags, j.posted_at AS "postedAt", j.source
-      FROM jobs j
-      WHERE j.is_active = true AND j.source = ${source}
-        AND (COALESCE(j.posted_at, j.first_seen_at) AT TIME ZONE 'Asia/Kolkata')::date
-            = (now() AT TIME ZONE 'Asia/Kolkata')::date
-        ${FRESHER_FILTER}
-        AND NOT EXISTS (
-          SELECT 1 FROM dispatch_log d
-          WHERE d.content_type = 'job' AND d.content_id = j.id
-            AND d.platform = ${platform} AND d.posted_at IS NOT NULL
-        )
-      ORDER BY COALESCE(j.posted_at, j.first_seen_at) DESC
-      LIMIT ${limit}
-    `;
-  }
-
-  // YCombinator / Talentd / Himalayas: newest unposted first.
+// One combined pool across every rotation source, ranked purely by recency —
+// not round-robin-by-source. "Share the latest job" means the single most
+// recently posted eligible job wins a slot regardless of which platform it
+// came from; picking one-per-source-in-turn (the old approach) could hand
+// out an older LinkedIn job ahead of a newer Himalayas one just because of
+// rotation order. No per-source cap either — a source can fill the whole
+// batch if its jobs are genuinely the freshest.
+async function selectJobBatch(platform: string, batchSize: number): Promise<JobRow[]> {
+  if (batchSize <= 0) return [];
   return prisma.$queryRaw<JobRow[]>`
     SELECT j.id, j.title, j.company, j.location, j.workplace_type AS "workplaceType",
            j.salary_min AS "salaryMin", j.salary_max AS "salaryMax",
            j.salary_currency AS "salaryCurrency", j.source_url AS "sourceUrl",
-           j.description, j.tags, j.posted_at AS "postedAt", j.source
+           j.description, j.formatted_description AS "formattedDescription",
+           j.tags, j.posted_at AS "postedAt", j.source
     FROM jobs j
-    WHERE j.is_active = true AND j.source = ${source}
+    WHERE j.is_active = true AND j.source IN (${Prisma.join(SOURCE_ROTATION)})
       ${FRESHER_FILTER}
+      ${FORMATTED_FILTER}
       AND NOT EXISTS (
         SELECT 1 FROM dispatch_log d
         WHERE d.content_type = 'job' AND d.content_id = j.id
           AND d.platform = ${platform} AND d.posted_at IS NOT NULL
       )
     ORDER BY COALESCE(j.posted_at, j.first_seen_at) DESC
-    LIMIT ${limit}
+    LIMIT ${batchSize}
   `;
-}
-
-async function selectJobBatch(platform: string, batchSize: number): Promise<JobRow[]> {
-  const postedToday = await getPostedTodayCounts(platform);
-
-  const candidateLists = new Map<string, JobRow[]>();
-  for (const source of SOURCE_ROTATION) {
-    const remaining = Math.max(0, (SOURCE_DAILY_QUOTA[source] ?? 0) - (postedToday[source] ?? 0));
-    const fetchLimit = Math.min(remaining, batchSize);
-    candidateLists.set(source, await fetchCandidates(source, platform, fetchLimit));
-  }
-
-  // Round-robin across sources, one at a time, until the combined cap is
-  // filled or every source's candidate list is exhausted.
-  const selected: JobRow[] = [];
-  let madeProgress = true;
-  while (selected.length < batchSize && madeProgress) {
-    madeProgress = false;
-    for (const source of SOURCE_ROTATION) {
-      if (selected.length >= batchSize) break;
-      const next = candidateLists.get(source)?.shift();
-      if (next) {
-        selected.push(next);
-        madeProgress = true;
-      }
-    }
-  }
-  return selected;
 }
 
 export async function GET(request: NextRequest) {
@@ -191,15 +134,19 @@ export async function GET(request: NextRequest) {
     // labels ("Fulltime", "Engineering manager") with real tech, so it isn't
     // a reliable skills source on its own — only extractTechnologies'
     // curated tech-keyword match feeds `skills`.
-    const base = jobs.map((job) => ({
-      job,
-      skills: extractTechnologies(job.description).slice(0, 6),
-      experience: extractExperience(job.description),
-      email: extractEmail(job.description),
-    }));
+    const base = jobs.map((job) => {
+      const text = flattenFormatted(job.formattedDescription) ?? job.description;
+      return {
+        job,
+        text,
+        skills: extractTechnologies(job.formattedDescription, job.description).slice(0, 6),
+        experience: extractExperience(job.formattedDescription, job.description),
+        email: extractEmail(job.formattedDescription, job.description),
+      };
+    });
 
     const inferred = await Promise.all(
-      base.map((b) => (b.skills.length === 0 || b.experience === null ? inferJobSignals(b.job.description) : null))
+      base.map((b) => (b.skills.length === 0 || b.experience === null ? inferJobSignals(b.text) : null))
     );
 
     base.forEach((b, i) => {
@@ -232,7 +179,10 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  if (type === "all" || type === "contest") {
+  // Contests aren't ready for production yet — /contest/{id} 404s there (see
+  // authNavFlags.ts), so a dispatched Telegram link would point at a dead
+  // page. Skip contest dispatch entirely rather than post broken links.
+  if (SHOW_UNRELEASED_NAV && (type === "all" || type === "contest")) {
     // "Only if live" = hasn't started yet or is currently ongoing, and
     // hasn't already passed its deadline.
     const contests = await prisma.$queryRaw<ContestRow[]>`

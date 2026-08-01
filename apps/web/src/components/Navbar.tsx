@@ -9,7 +9,7 @@ import { SHOW_UNRELEASED_NAV } from "@/lib/authNavFlags";
 
 const NAV_LINKS = [
   { label: "Jobs", href: "/jobs" },
-  { label: "Contests", href: "/contest" },
+  ...(SHOW_UNRELEASED_NAV ? [{ label: "Contests", href: "/contest" }] : []),
   { label: "Today", href: "/today" },
   { label: "About", href: "/about" },
 ];

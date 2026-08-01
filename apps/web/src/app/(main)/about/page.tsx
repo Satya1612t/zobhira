@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { prisma } from "@/lib/prisma";
 import { PageHero } from "@/components/PageHero";
 import { Trustability } from "@/components/home/Trustability";
@@ -12,8 +13,8 @@ export const metadata: Metadata = {
 };
 
 const LEADERSHIP = [
-  { name: "Nikhil Singh", role: "Founder & CEO", color: "#003366" },
-  { name: "Rafiya Memon", role: "Platform Manager", color: "#3a5f94" },
+  { name: "Nikhil Singh", role: "Founder & CEO", color: "#003366", photo: "/team/nikhil-singh.jpg" },
+  { name: "Rafiya Memon", role: "Platform Manager", color: "#3a5f94", photo: "/team/rafiya-memon.jpg" },
 ];
 
 const PILLARS = [
@@ -242,11 +243,17 @@ export default async function AboutPage() {
             A small team, run out of Indore.
           </p>
           <div style={{ display: "flex", gap: 32, flexWrap: "wrap", marginBottom: 56 }}>
-            {LEADERSHIP.map(({ name, role, color }) => (
+            {LEADERSHIP.map(({ name, role, color, photo }) => (
               <div key={name} style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <div className="shape-arch" style={{ width: 76, height: 76, flexShrink: 0, boxShadow: "0 0 0 1px var(--line)", background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 26 }}>
-                  {name[0]}
-                </div>
+                {photo ? (
+                  <div className="shape-arch" style={{ width: 76, height: 76, flexShrink: 0, boxShadow: "0 0 0 1px var(--line)", position: "relative", overflow: "hidden" }}>
+                    <Image src={photo} alt={name} fill sizes="76px" style={{ objectFit: "cover" }} />
+                  </div>
+                ) : (
+                  <div className="shape-arch" style={{ width: 76, height: 76, flexShrink: 0, boxShadow: "0 0 0 1px var(--line)", background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 26 }}>
+                    {name[0]}
+                  </div>
+                )}
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{name}</div>
                   <div style={{ fontSize: 13, color: "var(--color-text-muted)" }}>{role}</div>

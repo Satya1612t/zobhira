@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { DotLottieReact } from "@lottiefiles/dotlottie-react";
 
-// Outside the (main) route group (like /login-second) so it renders
-// full-bleed, no navbar/sidebar/footer chrome — matches how Next.js
-// resolves not-found.tsx for a totally unmatched URL: no segment layouts
-// are in the matched tree, so only this root-level file is used.
+// Outside the (main) route group so it renders full-bleed, no
+// navbar/sidebar/footer chrome — matches how Next.js resolves not-found.tsx
+// for a totally unmatched URL: no segment layouts are in the matched tree,
+// so only this root-level file is used.
 export default function NotFound() {
   return (
     <div

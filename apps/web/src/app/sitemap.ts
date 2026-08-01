@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { prisma } from "@/lib/prisma";
 import { allListingSlugs, MIN_LISTINGS_TO_INDEX } from "@/lib/designationCities";
+import { SHOW_UNRELEASED_NAV } from "@/lib/authNavFlags";
 
 const BASE_URL = "https://zobhira.com";
 
@@ -12,6 +13,9 @@ export const dynamic = "force-dynamic";
 // /login is noindex (see its own metadata), /profile is a static mockup with
 // no real per-user content yet, and /progress just redirects out to the
 // admin app — none of the three belong in a sitemap search engines crawl.
+// /contest is excluded in production too — it 404s there (see
+// authNavFlags.ts), so submitting it to search engines would just be
+// submitting 404s.
 const STATIC_ROUTES: Array<{
   path: string;
   priority: number;
@@ -19,7 +23,7 @@ const STATIC_ROUTES: Array<{
 }> = [
   { path: "/", priority: 1, changeFrequency: "hourly" },
   { path: "/jobs", priority: 0.9, changeFrequency: "hourly" },
-  { path: "/contest", priority: 0.9, changeFrequency: "hourly" },
+  ...(SHOW_UNRELEASED_NAV ? [{ path: "/contest", priority: 0.9, changeFrequency: "hourly" as const }] : []),
   { path: "/today", priority: 0.8, changeFrequency: "hourly" },
   { path: "/about", priority: 0.5, changeFrequency: "monthly" },
   { path: "/contact", priority: 0.4, changeFrequency: "yearly" },
@@ -30,7 +34,9 @@ const STATIC_ROUTES: Array<{
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [jobs, contests, activeJobsForCounts] = await Promise.all([
     prisma.job.findMany({ where: { isActive: true }, select: { id: true, lastScrapedAt: true } }),
-    prisma.contest.findMany({ where: { isActive: true }, select: { id: true, lastScrapedAt: true } }),
+    SHOW_UNRELEASED_NAV
+      ? prisma.contest.findMany({ where: { isActive: true }, select: { id: true, lastScrapedAt: true } })
+      : Promise.resolve([]),
     prisma.job.findMany({ where: { isActive: true }, select: { tags: true, location: true } }),
   ]);
 

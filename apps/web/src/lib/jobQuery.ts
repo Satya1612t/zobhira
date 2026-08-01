@@ -6,8 +6,12 @@ import { expandSkillQuery } from "@/lib/skillVocab";
 // column except `raw` (the full scraped-page payload, which no frontend
 // component ever reads but which was otherwise shipped over the wire on
 // every single job row, list or detail). `dedupKey`/`extractionMethod`/
-// `firstSeenAt`/`lastScrapedAt` are internal bookkeeping the UI never
-// renders either, so they're left out too.
+// `lastScrapedAt` are internal bookkeeping the UI never renders, so they're
+// left out too. `firstSeenAt` IS selected despite being scrape bookkeeping —
+// some sources (YCombinator) never provide a real `postedAt` at all (see
+// scrapers/ycombinator.py's own docstring), so JobCard falls back to our
+// scrape date, formatted identically to a real postedAt, rather than
+// showing nothing.
 export const JOB_SELECT = {
   id: true,
   title: true,
@@ -24,6 +28,7 @@ export const JOB_SELECT = {
   highlights: true,
   tags: true,
   postedAt: true,
+  firstSeenAt: true,
   deadlineAt: true,
   logoUrl: true,
   isActive: true,
@@ -336,6 +341,12 @@ export async function buildJobsWhere(
 
   const where: Prisma.JobWhereInput = {
     isActive: true,
+    // A job isn't publicly visible until scrape-time LLM formatting has run
+    // on it (see services/scraper/utils/job_formatter.py) — the detail page
+    // itself 404s for an unformatted job, so it must never surface here
+    // either. See apps/web/src/app/(main)/jobs/[id]/page.tsx's matching
+    // notFound() guard.
+    formattedDescription: { not: null },
     ...(isDefaultIndiaScope
       ? indiaScopeFilter()
       : location && !isAnyLocation
@@ -366,6 +377,7 @@ export async function buildJobsWhere(
 export function relatedJobsWhere(job: { id: string; tagsNorm: string[] }): Prisma.JobWhereInput {
   return {
     isActive: true,
+    formattedDescription: { not: null },
     id: { not: job.id },
     tagsNorm: { hasSome: job.tagsNorm },
   };

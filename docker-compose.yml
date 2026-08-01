@@ -12,5 +12,22 @@ services:
       - job_portal_pgdata:/var/lib/postgresql/data
       - ./db/migrations:/docker-entrypoint-initdb.d
 
+  # Same image/config as docker-compose.prod.yml's freellmapi service, for
+  # local testing of scrape-time LLM formatting before deploying to prod.
+  # Local-dev-only: bound to all interfaces on localhost:3001 (no need for
+  # prod's 127.0.0.1-only restriction here, since nothing but your own
+  # machine can reach this port anyway).
+  freellmapi:
+    image: ghcr.io/tashfeenahmed/freellmapi:latest
+    restart: unless-stopped
+    environment:
+      ENCRYPTION_KEY: ${FREELLMAPI_ENCRYPTION_KEY:-local-dev-only-encryption-key-change-me}
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    volumes:
+      - freellmapi_data:/app/server/data
+
 volumes:
   job_portal_pgdata:
+  freellmapi_data:

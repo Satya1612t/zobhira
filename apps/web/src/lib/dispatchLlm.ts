@@ -19,10 +19,14 @@ export interface JobSignals {
 
 const EMPTY: JobSignals = { skills: [], experience: null };
 
-export async function inferJobSignals(description: string | null): Promise<JobSignals> {
+// `text` should already be the flattened formatted description where
+// available (see jobInsights.ts::flattenFormatted), falling back to raw
+// description only for a job that hasn't been formatted yet — computed once
+// by the caller, since this function only ever needs one string.
+export async function inferJobSignals(text: string | null): Promise<JobSignals> {
   const baseUrl = process.env.FREELLMAPI_BASE_URL;
   const apiKey = process.env.FREELLMAPI_API_KEY;
-  if (!baseUrl || !apiKey || !description) return EMPTY;
+  if (!baseUrl || !apiKey || !text) return EMPTY;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -47,7 +51,7 @@ export async function inferJobSignals(description: string | null): Promise<JobSi
               'short phrase like "2-4 years" or "Entry level", or null if the description ' +
               "does not state one. If no skills are mentioned, use an empty array. " +
               "Do not guess or invent anything not implied by the text.\n\n" +
-              `Description:\n${description}`,
+              `Description:\n${text}`,
           },
         ],
       }),

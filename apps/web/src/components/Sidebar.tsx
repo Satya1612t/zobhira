@@ -53,7 +53,9 @@ function ProfileIcon() {
 const TABS = [
   { label: "Home", href: "/", Icon: HomeIcon },
   { label: "Jobs", href: "/jobs", Icon: JobsIcon, countKey: "jobsCount" as const },
-  { label: "Contests", href: "/contest", Icon: ContestsIcon, countKey: "contestsCount" as const },
+  ...(SHOW_UNRELEASED_NAV
+    ? [{ label: "Contests", href: "/contest", Icon: ContestsIcon, countKey: "contestsCount" as const }]
+    : []),
   ...(SHOW_UNRELEASED_NAV ? [{ label: "Today", href: "/today", Icon: LiveIcon }] : []),
 ];
 

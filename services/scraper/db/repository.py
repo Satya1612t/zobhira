@@ -13,14 +13,16 @@ INSERT INTO jobs (
     salary_min, salary_max, salary_currency,
     source, source_url, description, tags, posted_at, deadline_at, logo_url,
     last_scraped_at, is_active, extraction_method, employment_type, seniority, raw,
-    min_years_exp, max_years_exp, experience_band, exp_source, tags_norm, field_provenance, enrichment_hash, enriched_at
+    min_years_exp, max_years_exp, experience_band, exp_source, tags_norm, field_provenance, enrichment_hash, enriched_at,
+    formatted_description, highlights
 )
 VALUES (
     %(dedup_key)s, %(title)s, %(company)s, %(location)s, %(workplace_type)s,
     %(salary_min)s, %(salary_max)s, %(salary_currency)s,
     %(source)s, %(source_url)s, %(description)s, %(tags)s, %(posted_at)s, %(deadline_at)s, %(logo_url)s,
     now(), true, %(extraction_method)s, %(employment_type)s, %(seniority)s, %(raw)s,
-    %(min_years_exp)s, %(max_years_exp)s, %(experience_band)s, %(exp_source)s, %(tags_norm)s, %(field_provenance)s, %(enrichment_hash)s, now()
+    %(min_years_exp)s, %(max_years_exp)s, %(experience_band)s, %(exp_source)s, %(tags_norm)s, %(field_provenance)s, %(enrichment_hash)s, now(),
+    %(formatted_description)s, %(highlights)s
 )
 ON CONFLICT (dedup_key) DO UPDATE SET
     last_scraped_at = now(),
@@ -60,7 +62,15 @@ ON CONFLICT (dedup_key) DO UPDATE SET
     field_provenance = COALESCE(jobs.field_provenance,'{}'::jsonb)
                        || COALESCE(EXCLUDED.field_provenance,'{}'::jsonb),
     enrichment_hash  = COALESCE(EXCLUDED.enrichment_hash, jobs.enrichment_hash),
-    enriched_at      = now();
+    enriched_at      = now(),
+    -- Same COALESCE discipline as description/logo_url above — a re-scrape
+    -- that didn't run (or that ran into a tripped circuit breaker; see
+    -- utils/job_formatter.py::format_posting_with_breaker) submits an empty
+    -- formatted_description/highlights and must not erase a previously
+    -- formatted row back to unformatted (which would also re-hide it from
+    -- the public site, see jobQuery.ts's formattedDescription filter).
+    formatted_description = COALESCE(EXCLUDED.formatted_description, jobs.formatted_description),
+    highlights = CASE WHEN array_length(EXCLUDED.highlights, 1) > 0 THEN EXCLUDED.highlights ELSE jobs.highlights END;
 """
 
 _EXISTS_BY_DEDUP_KEY_SQL = "SELECT EXISTS (SELECT 1 FROM jobs WHERE dedup_key = %(dedup_key)s) AS found;"
@@ -179,6 +189,8 @@ def upsert_job(conn: psycopg.Connection, posting: JobPosting) -> bool:
                 "tags_norm": posting.tags_norm,
                 "field_provenance": psycopg.types.json.Json(posting.field_provenance),
                 "enrichment_hash": posting.enrichment_hash,
+                "formatted_description": posting.formatted_description,
+                "highlights": posting.highlights,
             },
         )
     return True

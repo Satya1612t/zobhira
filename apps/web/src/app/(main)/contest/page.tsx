@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ContestFeed } from "@/components/ContestFeed";
 import Image from "next/image";
 import { AspectBox } from "@/components/ui/AspectBox";
 import { buildContestsWhere, CONTEST_SELECT, CONTEST_ORDER_BY, type ContestSearchParams } from "@/lib/contestQuery";
+import { SHOW_UNRELEASED_NAV } from "@/lib/authNavFlags";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +20,11 @@ export default async function ContestPage({
 }: {
   searchParams: ContestSearchParams;
 }) {
+  // Contests aren't ready for production yet — same gate as the nav links
+  // that point here (Navbar/Sidebar/Footer), so a direct/shared URL can't
+  // reach a page that's hidden everywhere else. See authNavFlags.ts.
+  if (!SHOW_UNRELEASED_NAV) notFound();
+
   const { platform } = searchParams;
   const where = buildContestsWhere({ platform });
 

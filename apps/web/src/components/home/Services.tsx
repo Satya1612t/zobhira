@@ -3,6 +3,7 @@ import { AspectBox } from "@/components/ui/AspectBox";
 import { Figure } from "@/components/ui/Figure";
 import { Reveal } from "@/components/ui/Reveal";
 import { ServiceLottieVisual } from "@/components/home/ServiceSearchVisual";
+import { SHOW_UNRELEASED_NAV } from "@/lib/authNavFlags";
 
 // Its visual is a Lottie animation (ServiceLottieVisual), not a stock
 // image, so it has no `image` field.
@@ -24,13 +25,19 @@ type SmallCard = {
 };
 
 const SMALL_CARDS: SmallCard[] = [
-  {
-    title: "Contests worth entering",
-    body: "Hackathons and coding contests that are still open, with the deadline, prize, and who can join shown up front.",
-    lottieSrc: "https://lottie.host/b0510d17-19c1-4344-9acf-28c8e41b3a5f/zPwA7LJgts.lottie",
-    href: "/contest",
-    cta: "See contests",
-  },
+  // Contests aren't ready for production yet — same gate as the nav links
+  // that point at /contest (see authNavFlags.ts).
+  ...(SHOW_UNRELEASED_NAV
+    ? [
+        {
+          title: "Contests worth entering",
+          body: "Hackathons and coding contests that are still open, with the deadline, prize, and who can join shown up front.",
+          lottieSrc: "https://lottie.host/b0510d17-19c1-4344-9acf-28c8e41b3a5f/zPwA7LJgts.lottie",
+          href: "/contest",
+          cta: "See contests",
+        },
+      ]
+    : []),
   {
     title: "Job posts you can actually read",
     body: "Long job posts get cleaned up. Salary, experience, and requirements sit right at the top so you know in ten seconds if it's for you.",

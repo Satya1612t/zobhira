@@ -29,12 +29,15 @@ export async function GET(request: NextRequest) {
   const q = searchParams.get("q")?.trim();
   const source = searchParams.get("source") || undefined;
   const isActiveParam = searchParams.get("isActive");
+  const formattedParam = searchParams.get("formatted");
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
 
   const where: Prisma.JobWhereInput = {
     ...(source ? { source } : {}),
     ...(isActiveParam === "true" ? { isActive: true } : {}),
     ...(isActiveParam === "false" ? { isActive: false } : {}),
+    ...(formattedParam === "true" ? { formattedDescription: { not: null } } : {}),
+    ...(formattedParam === "false" ? { formattedDescription: null } : {}),
     ...(q
       ? {
           OR: [

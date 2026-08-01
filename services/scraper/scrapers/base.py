@@ -48,6 +48,12 @@ class JobPosting:
     tags_norm: list[str] = field(default_factory=list)
     field_provenance: dict = field(default_factory=dict)
     enrichment_hash: str | None = None
+    # Set at scrape time by utils/job_formatter.py::format_posting_with_breaker
+    # (run_scrape.py's run_source()) — left at their defaults if the LLM
+    # formatting pass didn't run or failed, same as any other not-yet-
+    # enriched field.
+    formatted_description: str | None = None
+    highlights: list[str] = field(default_factory=list)
 
 
 class BaseJobScraper(ABC):

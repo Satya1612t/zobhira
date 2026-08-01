@@ -95,7 +95,13 @@ def format_job_description(description: str | None) -> dict:
     batch pipeline, so a failure here must never break the page, and the
     deterministic cleanup alone is still a real improvement over showing
     the fully raw description."""
-    empty = {"formatted_description": None, "highlights": []}
+    # llm_used distinguishes "the real structuring pass ran" from "fell back
+    # to deterministic cleanup only" — the on-demand caller doesn't care
+    # (either result is fine to cache/show), but the scrape-time circuit
+    # breaker in format_posting_with_breaker() below needs this to count
+    # actual LLM failures, since a fallback result otherwise looks
+    # superficially like success (non-None formatted_description).
+    empty = {"formatted_description": None, "highlights": [], "llm_used": False}
     if not description or not description.strip():
         return empty
 
@@ -103,7 +109,7 @@ def format_job_description(description: str | None) -> dict:
     # Fallback if every LLM provider fails below — plain cleaned text,
     # same shape FormattedJobDescription.tsx already renders as prose for
     # any pre-existing (old-format) formatted_description row.
-    fallback = {"formatted_description": cleaned or None, "highlights": []}
+    fallback = {"formatted_description": cleaned or None, "highlights": [], "llm_used": False}
     if not cleaned:
         return empty
 
@@ -168,4 +174,39 @@ def format_job_description(description: str | None) -> dict:
         return fallback
 
     highlights = _str_list("highlights")[:6]
-    return {"formatted_description": json.dumps(structured), "highlights": highlights}
+    return {"formatted_description": json.dumps(structured), "highlights": highlights, "llm_used": True}
+
+
+# Consecutive total-provider failures (every provider in llm_fallback.py's
+# chain failed for one posting) tolerated within a single scrape run before
+# skipping formatting for the rest of that run — avoids hammering a
+# genuinely exhausted quota across hundreds of remaining postings. Reset
+# every run (breaker_state is a plain dict passed in by the caller, never
+# module-level), so a fresh scrape always gets a fresh chance.
+BREAKER_THRESHOLD = 5
+
+
+def format_posting_with_breaker(posting, breaker_state: dict) -> None:
+    """Mutates posting.formatted_description / posting.highlights in place
+    for scrape-time formatting (see run_scrape.py's run_source()). No-ops
+    once the breaker has tripped or the quota pre-flight check says
+    unavailable — posting is then saved with formatted_description left at
+    its default (None), same as if formatting were never attempted, so it
+    stays a normal candidate for a later backfill sweep.
+
+    breaker_state = {"consecutive_failures": int, "tripped": bool} — local
+    to one run_source() call, passed in by the caller, never persisted or
+    shared across runs."""
+    from utils.quota_checker import check_quota_available
+
+    if breaker_state["tripped"] or not check_quota_available():
+        return
+    result = format_job_description(posting.description)
+    if not result["llm_used"]:
+        breaker_state["consecutive_failures"] += 1
+        if breaker_state["consecutive_failures"] >= BREAKER_THRESHOLD:
+            breaker_state["tripped"] = True
+        return
+    breaker_state["consecutive_failures"] = 0
+    posting.formatted_description = result["formatted_description"]
+    posting.highlights = result["highlights"]

@@ -74,15 +74,12 @@ export function FormattedJobDescription({
   jobId,
   description,
   formattedDescription,
-  highlights: initialHighlights,
 }: {
   jobId: string;
   description: string | null;
   formattedDescription: string | null;
-  highlights: string[];
 }) {
   const [formatted, setFormatted] = useState(formattedDescription);
-  const [highlights, setHighlights] = useState(initialHighlights);
   const [justSwapped, setJustSwapped] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -96,13 +93,12 @@ export function FormattedJobDescription({
     let cancelled = false;
     fetch(`/api/jobs/${jobId}/format-description`, { method: "POST" })
       .then((res) => res.json())
-      .then((data: { formatted_description?: string; highlights?: string[] }) => {
+      .then((data: { formatted_description?: string }) => {
         if (cancelled) return;
         if (data.formatted_description) {
           setFormatted(data.formatted_description);
           setJustSwapped(true);
         }
-        if (Array.isArray(data.highlights)) setHighlights(data.highlights);
       })
       .catch(() => {
         // Silently keep showing the raw description — never block or
@@ -130,19 +126,6 @@ export function FormattedJobDescription({
 
   return (
     <div style={{ marginTop: 26, paddingTop: 22, borderTop: "1px solid var(--line)" }}>
-      {highlights.length > 0 && (
-        <div style={{ marginBottom: 18 }} className={justSwapped ? "job-desc-cross-fade" : undefined}>
-          <div className="kicker" style={{ marginBottom: 8 }}>Key highlights</div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {highlights.map((highlight) => (
-              <span key={highlight} className="tag tag-accent">
-                &#10003; {highlight}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
       {!formatted && (
         <p className="job-desc-formatting-note">
           Formatting this description

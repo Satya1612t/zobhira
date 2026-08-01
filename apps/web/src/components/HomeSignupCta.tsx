@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SHOW_UNRELEASED_NAV } from "@/lib/authNavFlags";
 
 // Rewritten for the "Editorial Signal" homepage redesign — full-bleed dark
 // section, no client JS needed (plain GET form to /login, same pattern as
@@ -21,13 +22,15 @@ export function HomeSignupCta({ jobsCount, contestsCount }: { jobsCount: number;
           <Link href="/jobs" className="btn btn-signal" style={{ textDecoration: "none" }}>
             Find jobs
           </Link>
-          <Link
-            href="/contest"
-            className="btn"
-            style={{ textDecoration: "none", border: "1px solid var(--color-divider-onDark)", color: "var(--color-text-onDark)" }}
-          >
-            Browse contests
-          </Link>
+          {SHOW_UNRELEASED_NAV && (
+            <Link
+              href="/contest"
+              className="btn"
+              style={{ textDecoration: "none", border: "1px solid var(--color-divider-onDark)", color: "var(--color-text-onDark)" }}
+            >
+              Browse contests
+            </Link>
+          )}
         </div>
 
         <p style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-onDark)", margin: "0 0 10px" }}>
@@ -55,7 +58,8 @@ export function HomeSignupCta({ jobsCount, contestsCount }: { jobsCount: number;
         </p>
 
         <p style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-onDark-muted)" }}>
-          {jobsCount.toLocaleString()} jobs open &middot; {contestsCount.toLocaleString()} contests open
+          {jobsCount.toLocaleString()} jobs open
+          {SHOW_UNRELEASED_NAV && <> &middot; {contestsCount.toLocaleString()} contests open</>}
         </p>
       </div>
     </section>

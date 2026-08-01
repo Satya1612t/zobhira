@@ -1,6 +1,7 @@
 "use client";
 
-import { DotLottieReact } from "@lottiefiles/dotlottie-react";
+import { useCallback, useEffect, useRef } from "react";
+import { DotLottieReact, type DotLottie } from "@lottiefiles/dotlottie-react";
 
 // Shared by the service cards that use a Lottie animation instead of a
 // static <Figure> image — fills the parent <AspectBox> exactly like the
@@ -17,9 +18,41 @@ import { DotLottieReact } from "@lottiefiles/dotlottie-react";
 // after the fact, so it stays crisp for both scale > 1 (crops in, via the
 // outer overflow:hidden) and scale < 1 (shrinks with no zoom).
 export function ServiceLottieVisual({ src, scale = 1 }: { src: string; scale?: number }) {
-  const dpr = typeof window !== "undefined" ? Math.min(4, window.devicePixelRatio || 1) : 2;
+  // Capped at 2, not 4 — dotlottie rasters its canvas at this resolution on
+  // every single frame, so 4x on a high-DPI screen means up to 4x the
+  // per-frame cost for a gain that isn't visible at these card sizes.
+  const dpr = typeof window !== "undefined" ? Math.min(2, window.devicePixelRatio || 1) : 2;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dotLottieRef = useRef<DotLottie | null>(null);
+
+  const handleDotLottieRef = useCallback((instance: DotLottie | null) => {
+    dotLottieRef.current = instance;
+  }, []);
+
+  // Three of these run on the homepage at once (Services x2, Trustability
+  // x1), all looping forever regardless of scroll position by default —
+  // continuous off-screen canvas rastering was the main source of the
+  // scroll jank reported near those sections. Pause/resume based on actual
+  // viewport visibility instead of leaving every instance running always.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const instance = dotLottieRef.current;
+        if (!instance) return;
+        if (entry.isIntersecting) instance.play();
+        else instance.pause();
+      },
+      { threshold: 0 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div
+      ref={containerRef}
       style={{ position: "absolute", inset: 0, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}
       aria-hidden="true"
     >
@@ -28,6 +61,7 @@ export function ServiceLottieVisual({ src, scale = 1 }: { src: string; scale?: n
           src={src}
           loop
           autoplay
+          dotLottieRefCallback={handleDotLottieRef}
           renderConfig={{ autoResize: true, devicePixelRatio: dpr }}
           style={{ width: "100%", height: "100%" }}
         />

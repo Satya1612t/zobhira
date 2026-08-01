@@ -44,3 +44,23 @@ def strip_trailing_toggle(text: str | None) -> str | None:
     if not text:
         return text
     return _TRAILING_TOGGLE_RE.sub("", text).strip() or None
+
+
+# U+FFFD ("�") shows up in scraped text when a *source site's own backend*
+# mis-transcoded a character (e.g. Windows-1252 bytes re-encoded as UTF-8)
+# before ever serving it to us — live-confirmed on talentd.in, where the
+# replacement character is already baked into the raw JSON payload their
+# Next.js page embeds server-side, not introduced by anything in our
+# pipeline (Playwright/httpx both decode correctly; the bytes we receive
+# are already corrupted). The original character is unrecoverable at that
+# point, so this can only clean up the display, not restore the source
+# text: collapse a run of one or more U+FFFD (with optional surrounding
+# whitespace) into a single plain hyphen, since in every confirmed case so
+# far it stood in for an en/em dash acting as a separator.
+_REPLACEMENT_CHAR_RE = re.compile(r"\s*�+\s*")
+
+
+def clean_replacement_chars(text: str | None) -> str | None:
+    if not text:
+        return text
+    return _REPLACEMENT_CHAR_RE.sub(" - ", text).strip() or None

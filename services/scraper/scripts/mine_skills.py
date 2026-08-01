@@ -54,6 +54,7 @@ practice, it does not belong here.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import re
 import sys
@@ -264,6 +265,32 @@ def _best_alias_match(term: str, canonicals: set[str]) -> tuple[str | None, floa
 # Mining
 # ---------------------------------------------------------------------------
 
+def flatten_formatted(formatted_description: str | None) -> str | None:
+    """Reconstructs a plain-text blob from job_formatter.py's structured JSON
+    shape (overview + responsibilities/requirements/niceToHave/benefits/
+    details), so extract_candidates()'s context-window regexes (which expect
+    prose, not JSON) can run against it. Mirrors apps/web's
+    jobInsights.ts::flattenFormatted. Returns None on anything not in that
+    shape, so callers fall back to raw description."""
+    if not formatted_description:
+        return None
+    try:
+        data = json.loads(formatted_description)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    parts: list[str] = []
+    overview = data.get("overview")
+    if isinstance(overview, str) and overview.strip():
+        parts.append(overview)
+    for key in ("responsibilities", "requirements", "niceToHave", "benefits", "details"):
+        value = data.get(key)
+        if isinstance(value, list):
+            parts.extend(str(v) for v in value)
+    return "\n".join(parts) if parts else None
+
+
 def mine(conn, scan_limit: int) -> None:
     known, blocked, canonicals = _load_known(conn)
     logger.info("Vocabulary: %d known spellings, %d canonical, %d blocked",
@@ -271,8 +298,8 @@ def mine(conn, scan_limit: int) -> None:
 
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT company, description FROM jobs "
-            "WHERE is_active = true AND description IS NOT NULL "
+            "SELECT company, description, formatted_description FROM jobs "
+            "WHERE is_active = true AND (description IS NOT NULL OR formatted_description IS NOT NULL) "
             "ORDER BY first_seen_at DESC LIMIT %(limit)s",
             {"limit": scan_limit},
         )
@@ -284,8 +311,11 @@ def mine(conn, scan_limit: int) -> None:
     samples: dict[str, list[str]] = defaultdict(list)
 
     for row in rows:
+        text = flatten_formatted(row.get("formatted_description")) or row["description"]
+        if not text:
+            continue
         seen_in_doc: set[str] = set()
-        for term in extract_candidates(row["description"]):
+        for term in extract_candidates(text):
             key = normalize(term)
             if not key or key in known or key in blocked:
                 continue

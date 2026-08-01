@@ -266,7 +266,18 @@ p {
 }
 .tag-accent { background: var(--color-accent-soft); color: var(--color-accent); }
 .tag-neutral { background: var(--color-surface-muted); color: var(--color-text-muted); }
-.tag-outline { border: 1px solid var(--color-divider); color: var(--color-text-muted); background: var(--color-surface); }
+.tag-outline { border: 1px solid var(--color-divider); color: var(--color-text-muted); background: var(--color-surface); transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+/* Job listing cards' tags only — not ContestCard, which reuses the same
+   .tag class for its own tags. */
+.job-card .tag {
+  margin-block: 1px;
+}
+.job-card .tag-outline:hover {
+  border-color: transparent;
+  color: #fff;
+  background: var(--color-success);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-success) 55%, transparent);
+}
 
 .trust-logo:hover { filter: grayscale(0) opacity(1) !important; }
 
@@ -372,134 +383,7 @@ p {
   }
 }
 
-/* — /login-second preview (Prompt 08) — */
-.auth-split-screen {
-  display: grid;
-  grid-template-columns: 45% 1fr;
-  min-height: 100vh;
-}
-.auth-brand-panel {
-  position: relative;
-  overflow: hidden;
-  padding: 40px 48px;
-  display: flex;
-  flex-direction: column;
-}
-.auth-form-panel {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: var(--color-bg);
-}
-@media (max-width: 899px) {
-  .auth-split-screen {
-    grid-template-columns: 1fr;
-  }
-  .auth-brand-panel {
-    display: none;
-  }
-}
-
-.auth-card-v2 {
-  padding: 32px;
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-lg);
-}
-.auth-card-shake {
-  animation: auth-shake 400ms ease;
-}
-@keyframes auth-shake {
-  0%, 100% { transform: translateX(0); }
-  20%, 60% { transform: translateX(-4px); }
-  40%, 80% { transform: translateX(4px); }
-}
-.auth-card-logo {
-  display: inline-block;
-  margin-bottom: 22px;
-}
-.auth-card-title {
-  font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: 700;
-  margin: 0 0 6px;
-  color: var(--color-text);
-}
-.auth-card-sub {
-  font-size: 13.5px;
-  color: var(--color-text-muted);
-  margin: 0 0 24px;
-}
-.auth-form-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  margin-bottom: 18px;
-}
-.auth-submit-btn {
-  position: relative;
-  width: 100%;
-  height: 48px;
-  border-radius: var(--radius-full);
-  box-shadow: var(--shadow-accent);
-}
-.auth-submit-label--hidden {
-  visibility: hidden;
-}
-.auth-submit-spinner {
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-full);
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
-  animation: auth-spin 700ms linear infinite;
-}
-@keyframes auth-spin {
-  to { transform: rotate(360deg); }
-}
-.auth-divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 20px 0 16px;
-}
-.auth-divider::before, .auth-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--color-divider);
-}
-.auth-divider span {
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-}
-.auth-social-btn {
-  height: 46px;
-  transition: box-shadow var(--dur-fast) var(--ease-out);
-}
-.auth-social-btn:hover {
-  box-shadow: var(--shadow-sm);
-}
-.auth-card-footnote {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 18px;
-  font-size: 11.5px;
-  color: var(--color-text-muted);
-  text-align: center;
-}
-
-/* — floating-label fields, shared by /login-second and /profile settings — */
+/* — floating-label fields, shared by /profile settings — */
 .field-floating {
   position: relative;
 }
@@ -1294,6 +1178,36 @@ p {
   border-radius: var(--radius-full);
   background: var(--color-accent);
 }
+/* Key highlights — same body-text font as .job-desc-list (Responsibilities
+   etc.), deliberately NOT .tag/.tag-accent's small bold pill font: these are
+   full sentences ("Required experience level: Intern..."), not short skill
+   names, so they need to read like prose, not badges. Checkmark bullet
+   (✓) instead of the plain dot keeps the "highlight" identity distinct from
+   a normal bullet list. */
+.job-desc-highlight-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.job-desc-highlight-list li {
+  position: relative;
+  padding-left: 22px;
+  font-size: var(--text-base);
+  line-height: 1.65;
+  color: var(--color-text);
+}
+.job-desc-highlight-list li::before {
+  content: "\2713";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
 .job-desc-prose strong {
   color: var(--color-ink-900);
 }
@@ -1693,6 +1607,10 @@ p {
   will-change: transform;
 }
 .home-hero-wall-col[data-dir="down"] .home-hero-wall-track { animation-name: home-hero-wall-down; }
+/* Paused (not unmounted) once scrolled off-screen — see HeroWall.tsx's
+   IntersectionObserver. Preserves each track's current frame so it resumes
+   seamlessly rather than jumping/restarting when scrolled back into view. */
+.home-hero-wall[data-in-view="false"] .home-hero-wall-track { animation-play-state: paused; }
 @keyframes home-hero-wall-up   { from { transform: translate3d(0,0,0); }    to { transform: translate3d(0,-50%,0); } }
 @keyframes home-hero-wall-down { from { transform: translate3d(0,-50%,0); } to { transform: translate3d(0,0,0); } }
 .home-hero-wall-card {
@@ -1983,6 +1901,7 @@ body {
 }
 
 .main-content {
+  position: relative; /* containing block for .navbar-float, now an overlay rather than a flex sibling — see its own comment */
   flex: 1;
   min-width: 0;
   display: flex;
@@ -2000,6 +1919,12 @@ body {
   flex: 1;
   min-height: 0; /* required for a flex child to actually be scrollable instead of growing to fit its content */
   overflow-y: auto;
+  /* Navbar is no longer a flex sibling reserving its own row (see
+     .navbar-float) — this replaces that reserved space so every page's
+     content starts exactly where it used to at rest (12px navbar margin +
+     68px navbar height), and only slides underneath the translucent pill
+     once you actually scroll. */
+  padding-top: 80px;
 }
 
 @media (max-width: 860px) {
@@ -2278,11 +2203,19 @@ a {
 }
 
 /* — floating navbar (Editorial Signal redesign) — */
-/* No position/sticky needed: it's a non-scrolling flex child at the top of
-   .main-content (only .main-scroll-area below it actually scrolls, see
-   AppShell.tsx), so it already stays in place for free — margin alone gives
-   it the floating-pill inset from the viewport edge. */
+/* True overlay now, not a flex sibling: absolutely positioned within
+   .main-content (which is its containing block — see .main-content's own
+   position:relative), sitting on top of .main-scroll-area instead of
+   pushing it down. .main-scroll-area compensates with matching padding-top
+   so nothing shifts at rest — the only difference is that scrolled content
+   now passes underneath the pill instead of stopping below it, which is
+   what makes the translucent background below actually show something
+   (previously nothing ever sat behind it to show through). */
 .navbar-float {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 25;
   margin: 12px var(--gutter) 0;
   display: flex;
@@ -2291,11 +2224,16 @@ a {
   height: 68px;
   padding: 0 10px 0 6px;
   border-radius: var(--radius-full);
-  /* Fully opaque on purpose — this used to be translucent with a blur
-     backdrop-filter, which let whatever sat behind it (the homepage hero's
-     colored wall cards/gradients) show through, tinted, as a visible color
-     mismatch behind the pill. */
-  background: var(--color-surface);
+  /* Translucent + blurred ("frosted glass"), not fully transparent — a
+     previous attempt at this went fully see-through with no blur, which let
+     the homepage hero's saturated wall gradient show through unblurred and
+     clash with the pill's border/shadow. Blur softens whatever's behind it
+     into a hint of color/motion rather than a hard-edged clash, and the 78%
+     opacity keeps foreground text/icons legible over busier page content
+     further down any page, not just the hero. */
+  background: color-mix(in srgb, var(--color-surface) 78%, transparent);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
   border: 1px solid var(--color-divider);
   box-shadow: var(--shadow-md);
   transition: height var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), background-color var(--dur-base) var(--ease-out);
@@ -2771,7 +2709,12 @@ a {
 
 @media (max-width: 1100px) {
   .jobs-filter-layout {
-    grid-template-columns: 1fr;
+    /* minmax(0, 1fr), not bare 1fr — same fix as .detail-grid/.job-detail-
+       layout/.jobs-layout above: a bare 1fr track's implicit minimum is its
+       content's min-content size, and a job card's nowrap title/flex-wrap
+       tag row has a large min-content width that was forcing this whole
+       track (and visibly the cards) wider than the mobile viewport. */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .jobs-streams-panel-compact {
@@ -2837,18 +2780,32 @@ a {
   max-width: 1280px;
   margin: 0 auto;
 }
+/* Runs forever, everywhere it's mounted (Hero's top badge + Footer),
+   regardless of scroll position — animating box-shadow used to force a
+   repaint on every keyframe step for the life of the page, competing with
+   scroll compositing the whole time. Same visual "ping" ring effect via an
+   ::after that only animates transform/opacity instead — compositor-only,
+   no repaint per frame. */
 .footer-pulse-dot {
+  position: relative;
   display: inline-block;
   width: 7px;
   height: 7px;
   border-radius: var(--radius-full);
   background: var(--color-success);
   flex-shrink: 0;
-  animation: footer-pulse 2s ease-in-out infinite;
+}
+.footer-pulse-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-success);
+  animation: footer-pulse 2s ease-out infinite;
 }
 @keyframes footer-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(15, 123, 83, 0.5); }
-  50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(15, 123, 83, 0); }
+  0% { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(2.4); opacity: 0; }
 }
 .footer-grid {
   display: grid;

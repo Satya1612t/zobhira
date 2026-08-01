@@ -4,21 +4,42 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { JobListItem } from "@/lib/jobQuery";
 import type { ContestListItem } from "@/lib/contestQuery";
 import { CompanyLogo } from "@/components/CompanyLogo";
+import { SHOW_UNRELEASED_NAV } from "@/lib/authNavFlags";
 
 // Internships/Walk-ins have no backing entity in the schema (only Job and
 // Contest exist) — hidden from this tab bar rather than shown as inert.
+// Contests itself is gated behind SHOW_UNRELEASED_NAV (see authNavFlags.ts)
+// — /contest 404s in production, so its tab/demo-scene/"See all" link must
+// not be reachable from here either.
 const TABS = [
   { key: "jobs", label: "Jobs", href: "/jobs", live: true },
-  { key: "contests", label: "Contests", href: "/contest", live: true },
+  ...(SHOW_UNRELEASED_NAV ? [{ key: "contests", label: "Contests", href: "/contest", live: true }] as const : []),
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
 
 type DemoRow = { key: string; name: string; logoUrl: string | null; title: string; meta: string; time: string; href: string };
-type Scene = { tab: TabKey; query: string; rows: DemoRow[]; count: string };
+// `rowPool` is every candidate row for that tab (not just the ones about to
+// show) — the loop below draws a random 2-4 of them each cycle so the demo
+// doesn't show the identical fixed set every time.
+type Scene = { tab: TabKey; query: string; rowPool: DemoRow[]; count: string };
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+// Random subset (2-4 rows, capped to what's available) in random order —
+// makes each cycle feel like a genuinely different search result instead of
+// the same static row set retyped under a new query every time.
+function pickRandomRows(pool: DemoRow[]): DemoRow[] {
+  if (pool.length === 0) return [];
+  const count = Math.min(pool.length, 2 + Math.floor(Math.random() * 3));
+  const shuffled = [...pool];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled.slice(0, count);
 }
 
 function hoursAgo(date: Date | null): string {
@@ -29,6 +50,29 @@ function hoursAgo(date: Date | null): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+// Varied phrasing so the typed demo doesn't visibly retype the identical
+// query forever — especially now that contests (the only other tab) are
+// hidden in production, leaving jobs as the sole rotation. Every variant
+// shares the same result rows/count below (still real, live data — only
+// the query text itself is scripted, same as a search-bar placeholder).
+const JOB_QUERIES = [
+  "Forward deployed engineer",
+  "Machine Learning engineer",
+  "AI engineer",
+  "Automation Engineer",
+  "backend developer",
+  "data analyst fresher",
+  "Java developer",
+  "frontend intern",
+  "DevOps engineer",
+  "full-stack developer",
+  "Digital marketing executive",
+  "PPC specialist",
+  "remote software engineer",
+  "remote data scientist",
+  "remote product manager",
+];
+
 // The demo cascade is real, currently-live data (jobs/contests already
 // fetched for the rest of the homepage), typed out on a loop — not
 // fabricated placeholder rows. Only the query phrase itself is scripted
@@ -37,26 +81,25 @@ function useScenes(jobs: JobListItem[], contests: ContestListItem[], jobsCount: 
   return useMemo(() => {
     const scenes: Scene[] = [];
     if (jobs.length > 0) {
-      scenes.push({
-        tab: "jobs",
-        query: "software engineer bengaluru",
-        rows: jobs.slice(0, 4).map((job) => ({
-          key: job.id,
-          name: job.company,
-          logoUrl: job.logoUrl,
-          title: job.title,
-          meta: `${job.company}${job.location ? ` · ${job.location}` : ""}`,
-          time: hoursAgo(job.postedAt),
-          href: `/jobs/${job.id}`,
-        })),
-        count: `${jobsCount.toLocaleString()} jobs`,
-      });
+      const rowPool = jobs.map((job) => ({
+        key: job.id,
+        name: job.company,
+        logoUrl: job.logoUrl,
+        title: job.title,
+        meta: `${job.company}${job.location ? ` · ${job.location}` : ""}`,
+        time: hoursAgo(job.postedAt),
+        href: `/jobs/${job.id}`,
+      }));
+      const count = `${jobsCount.toLocaleString()} jobs`;
+      for (const query of JOB_QUERIES) {
+        scenes.push({ tab: "jobs", query, rowPool, count });
+      }
     }
-    if (contests.length > 0) {
+    if (SHOW_UNRELEASED_NAV && contests.length > 0) {
       scenes.push({
         tab: "contests",
         query: "hackathon this week",
-        rows: contests.slice(0, 4).map((contest) => ({
+        rowPool: contests.map((contest) => ({
           key: contest.id,
           name: contest.organizer ?? contest.platform,
           logoUrl: contest.logoUrl,
@@ -77,11 +120,18 @@ export function HeroLiveConsole({
   contests,
   jobsCount,
   contestsCount,
+  handedOver,
+  onHandedOverChange,
 }: {
   jobs: JobListItem[];
   contests: ContestListItem[];
   jobsCount: number;
   contestsCount: number;
+  // Lifted to Hero.tsx so HeroWall (the background job-card wall) can freeze
+  // in step with search being handed over to a real input, instead of
+  // continuing to scroll behind the user while they type.
+  handedOver: boolean;
+  onHandedOverChange: (handedOver: boolean) => void;
 }) {
   const scenes = useScenes(jobs, contests, jobsCount, contestsCount);
 
@@ -91,32 +141,60 @@ export function HeroLiveConsole({
   const [demoCount, setDemoCount] = useState("");
   const [rowsVisible, setRowsVisible] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [handedOver, setHandedOver] = useState(false);
   const [query, setQuery] = useState("");
 
   const inputRef = useRef<HTMLInputElement | null>(null);
-  // The demo cascade underneath is never permanently switched off — once a
-  // real input is up, it just pauses while there's real text in it (so it
-  // doesn't fight what the visitor is typing/about to submit) and resumes
-  // the moment the box is empty again, rather than freezing forever after
-  // the first click like it used to.
+  const consoleRef = useRef<HTMLFormElement | null>(null);
   const isEmpty = query.trim() === "";
+
+  // The typing/deleting loop below fires a state update every 14-38ms —
+  // harmless while Hero is on screen, but with nothing gating it, it kept
+  // running at that rate forever, competing with scroll compositing for the
+  // rest of the page (reported as jank persisting near TrustBar, well after
+  // Hero itself had scrolled away). Same fix as the homepage Lottie players:
+  // only run while actually visible.
+  const [inView, setInView] = useState(true);
+  useEffect(() => {
+    const el = consoleRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { threshold: 0 });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   function handOver() {
     if (handedOver) return;
-    setHandedOver(true);
-    setQuery(demoText);
+    onHandedOverChange(true);
+    // Empty, not demoText — clicking means "I want to type my own search",
+    // so the scripted text should disappear rather than land pre-filled.
+    setQuery("");
+    // Force the rows visible even if the click landed mid-cycle during the
+    // brief fade between two random draws — otherwise the "static" panel
+    // could freeze on its invisible frame instead of showing content.
+    setRowsVisible(true);
     setTimeout(() => inputRef.current?.focus(), 0);
   }
 
+  // 30s of the real input sitting empty after handover reverts back to the
+  // scripted demo — clearing the timer on every keystroke means it only
+  // ever fires while genuinely idle, never while someone's mid-type.
   useEffect(() => {
-    if (scenes.length === 0 || !isEmpty) return;
+    if (!handedOver || query.trim() !== "") return;
+    const timer = setTimeout(() => {
+      onHandedOverChange(false);
+      setQuery("");
+    }, 30000);
+    return () => clearTimeout(timer);
+  }, [handedOver, query, onHandedOverChange]);
+
+  useEffect(() => {
+    if (scenes.length === 0 || !isEmpty || !inView || handedOver) return;
     const reduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduced) {
       const s = scenes[0];
       setActiveTab(s.tab);
       setDemoText(s.query);
-      setDemoRows(s.rows);
+      setDemoRows(pickRandomRows(s.rowPool));
       setDemoCount(s.count);
       setRowsVisible(true);
       return;
@@ -138,7 +216,12 @@ export function HeroLiveConsole({
         await sleep(340);
         if (cancelled) return;
         setBusy(false);
-        setDemoRows(scene.rows);
+        // Fresh random draw every cycle (2-4 rows, random order) — never the
+        // same fixed set retyped under a new query, so it reads as a real
+        // changing result instead of a static loop. The panel's own
+        // min-height (.home-hero-res) keeps its footprint constant through
+        // the crossfade, so it never visibly collapses/closes either.
+        setDemoRows(pickRandomRows(scene.rowPool));
         setDemoCount(scene.count);
         setRowsVisible(true);
         await sleep(3400);
@@ -157,13 +240,17 @@ export function HeroLiveConsole({
     return () => {
       cancelled = true;
     };
-  }, [scenes, isEmpty]);
+  }, [scenes, isEmpty, inView]);
 
   const activeHref = TABS.find((t) => t.key === activeTab)?.href ?? "/jobs";
-  const rows = isEmpty ? demoRows : [];
+  // Always whatever was last shown — stays put (static) once handed over
+  // instead of disappearing the moment someone clicks in to type their own
+  // search; the demo loop above already stops updating it while handedOver
+  // is true, so this just keeps rendering that frozen snapshot.
+  const rows = demoRows;
 
   return (
-    <form action={activeHref} method="get" className="home-hero-console">
+    <form ref={consoleRef} action={activeHref} method="get" className="home-hero-console">
       <div className="home-hero-tabs" role="tablist">
         {TABS.map((tab) => (
           <button
@@ -196,7 +283,7 @@ export function HeroLiveConsole({
               name="q"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder='Try "data analyst" or "walk-in Hyderabad"'
+              placeholder='Try "data analyst" or "walk-in interview"'
             />
           ) : (
             <>
@@ -218,7 +305,7 @@ export function HeroLiveConsole({
         </button>
       </div>
 
-      {!handedOver && rows.length > 0 && (
+      {rows.length > 0 && (
         <div className="home-hero-res" aria-live="polite">
           {rows.map((row, i) => (
             <a

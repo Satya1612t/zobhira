@@ -10,6 +10,7 @@ import { LiveContests } from "@/components/home/LiveContests";
 import { Community } from "@/components/home/Community";
 import { Offers } from "@/components/home/Offers";
 import { HomeSignupCta } from "@/components/HomeSignupCta";
+import { SHOW_UNRELEASED_NAV } from "@/lib/authNavFlags";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,8 @@ export default async function HomePage() {
       <Services />
       <FeaturedRoles jobs={featuredJobs} jobsCount={jobsCount} />
       <Trustability />
-      <LiveContests contests={featuredContests} />
+      {/* Contests aren't ready for production yet — see authNavFlags.ts. */}
+      {SHOW_UNRELEASED_NAV && <LiveContests contests={featuredContests} />}
       <Community popularSearches={popularSearches} totalSearches={totalSearches} />
       <Offers />
       <HomeSignupCta jobsCount={jobsCount} contestsCount={contestsCount} />

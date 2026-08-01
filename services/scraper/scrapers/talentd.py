@@ -7,6 +7,7 @@ from scrapers.base import BaseJobScraper, JobPosting, SelectorNotFoundError
 from utils.browser import block_heavy_resources, get_browser, run_concurrently
 from utils.enrichment import select_unenriched
 from utils.rate_limit import throttle
+from utils.text import clean_replacement_chars
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,7 @@ class TalentdScraper(BaseJobScraper):
                     title = None
                     h2 = card.locator("h2").first
                     if h2.count() > 0:
-                        title = h2.inner_text().strip()
+                        title = clean_replacement_chars(h2.inner_text().strip())
                     if not title:
                         continue
                     if query_lower and query_lower not in title.lower():
@@ -103,9 +104,9 @@ class TalentdScraper(BaseJobScraper):
                         meta_text = meta_line.inner_text().strip()
                         parts = [p.strip() for p in meta_text.split("•")]
                         if parts:
-                            company = parts[0] or "Unknown"
+                            company = clean_replacement_chars(parts[0]) or "Unknown"
                         if len(parts) > 1:
-                            loc_text = parts[1] or None
+                            loc_text = clean_replacement_chars(parts[1]) or None
 
                     salary_text = None
                     salary_el = card.locator("p.text-green-600.font-medium").first
@@ -179,7 +180,7 @@ class TalentdScraper(BaseJobScraper):
 
             section = page.locator("section").first
             if section.count() > 0:
-                posting.description = section.inner_text().strip() or None
+                posting.description = clean_replacement_chars(section.inner_text().strip())
 
             ld_json_blobs = page.evaluate(
                 """() => Array.from(
@@ -235,7 +236,7 @@ class TalentdScraper(BaseJobScraper):
             # against 3 real postings, always present and correct.
             org_name = hiring_org.get("name")
             if org_name:
-                posting.company = org_name
+                posting.company = clean_replacement_chars(org_name)
 
             # Real, structured fields confirmed present on every Talentd
             # posting checked (3/3) — not guessed from the description text.

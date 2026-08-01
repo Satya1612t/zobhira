@@ -65,10 +65,15 @@ export function Hero({
   tickerContests: ContestListItem[];
 }) {
   const reduced = useReducedMotion();
+  // Lifted out of HeroLiveConsole so the wall-of-job-cards background can
+  // freeze on whatever it's showing the moment someone clicks into search,
+  // instead of continuing to scroll behind them while they're mid-type —
+  // and resume once the scripted demo search takes back over.
+  const [searchHandedOver, setSearchHandedOver] = useState(false);
 
   return (
     <section className="home-hero">
-      <HeroWall jobs={tickerJobs} />
+      <HeroWall jobs={tickerJobs} paused={searchHandedOver} />
       <div className="home-hero-veil" aria-hidden="true" />
 
       <motion.div
@@ -100,7 +105,14 @@ export function Hero({
         </motion.p>
 
         <motion.div variants={item}>
-          <HeroLiveConsole jobs={tickerJobs} contests={tickerContests} jobsCount={jobsCount} contestsCount={contestsCount} />
+          <HeroLiveConsole
+            jobs={tickerJobs}
+            contests={tickerContests}
+            jobsCount={jobsCount}
+            contestsCount={contestsCount}
+            handedOver={searchHandedOver}
+            onHandedOverChange={setSearchHandedOver}
+          />
         </motion.div>
 
         <motion.div variants={item} className="home-hero-acts">

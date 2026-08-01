@@ -4,41 +4,40 @@ import { useState } from "react";
 import Link from "next/link";
 import type { JobListItem } from "@/lib/jobQuery";
 import { CompanyLogo } from "./CompanyLogo";
-import { extractTechnologies } from "@/lib/jobInsights";
 import { useToast } from "@/components/ui/Toast";
 
-function formatSalary(job: {
-  salaryMin: unknown;
-  salaryMax: unknown;
-  salaryCurrency: string | null;
-}): string | null {
-  if (!job.salaryMin && !job.salaryMax) return null;
-  const currency = job.salaryCurrency ?? "";
-  const min = job.salaryMin?.toString();
-  const max = job.salaryMax?.toString();
-  if (min && max) return `${currency} ${min} - ${max}`;
-  return `${currency} ${min ?? max}`;
+// IST calendar date (YYYY-MM-DD), not raw elapsed time — so "today" lines
+// up with the same IST-day boundary the rest of the app uses (see the
+// dispatch route's same-day logic), instead of drifting on a UTC midnight.
+function istDateKey(date: Date): string {
+  return date.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
 
-function daysAgo(date: Date): string {
-  const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
-  if (days <= 0) return "today";
-  if (days === 1) return "1d ago";
-  return `${days}d ago`;
+// Same IST calendar day as now: "Today" if under an hour old, otherwise
+// "{h}h ago". Any earlier day: the actual date, not a day count — a job
+// posted "3d ago" reads worse than just seeing "Jul 29".
+function relativePostedTime(date: Date): string {
+  if (istDateKey(date) !== istDateKey(new Date())) {
+    return date.toLocaleDateString("en-US", { timeZone: "Asia/Kolkata", month: "short", day: "numeric", year: "numeric" });
+  }
+  const hours = Math.max(0, Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60)));
+  return hours < 1 ? "Today" : `${hours}h ago`;
 }
 
 // Every card gets the same total height regardless of how much optional
-// content a given job actually has (tags, salary, deadline) — each row
-// below reserves its own fixed height and clips overflow rather than
-// growing/shrinking the card, so a dense listing page reads as a uniform
-// grid instead of a ragged one.
+// content a given job actually has (tags) — each row below reserves its
+// own fixed height and clips overflow rather than growing/shrinking the
+// card, so a dense listing page reads as a uniform grid instead of a
+// ragged one.
 const TAGS_ROW_HEIGHT = 26;
 const META_ROW_HEIGHT = 20;
 
 export function JobCard({ job }: { job: JobListItem }) {
-  const salary = formatSalary(job);
-  const topTechnologies = extractTechnologies(job.description, 4);
-  const overflowCount = Math.max(0, extractTechnologies(job.description, 99).length - 4);
+  // Real, DB-persisted skill/designation tags (services/scraper/utils/
+  // skill_tagger.py) — same "Skill Required" data the detail page shows, not the
+  // narrow hardcoded tech-keyword regex scan extractTechnologies() does.
+  const topTags = job.tags.slice(0, 4);
+  const overflowCount = Math.max(0, job.tags.length - 4);
   // Cosmetic only — no backend to persist this yet (see /DESIGN.md). The
   // toast is real feedback even though the save itself isn't persisted.
   const [saved, setSaved] = useState(false);
@@ -101,25 +100,21 @@ export function JobCard({ job }: { job: JobListItem }) {
         </div>
 
         <div style={{ marginTop: 12, height: TAGS_ROW_HEIGHT, overflow: "hidden", display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {topTechnologies.map((tech) => (
-            <span key={tech} className="tag tag-outline">
-              {tech}
+          {topTags.map((tag) => (
+            <span key={tag} className="tag tag-outline">
+              {tag}
             </span>
           ))}
           {overflowCount > 0 && <span className="tag tag-neutral">+{overflowCount}</span>}
-          {job.workplaceType !== "unknown" && <span className="tag tag-accent" style={{ textTransform: "capitalize" }}>{job.workplaceType}</span>}
-          {salary && <span className="tag tag-neutral">{salary}</span>}
         </div>
 
         <div className="job-card-footer" style={{ marginTop: 14, height: META_ROW_HEIGHT }}>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--color-text-muted)" }}>
-            {job.postedAt ? daysAgo(job.postedAt) : ""}
+            {/* Some sources (YCombinator) never provide a real posted date —
+                fall back to our own scrape date (firstSeenAt), formatted
+                exactly the same way, rather than showing nothing. */}
+            PostedAt - {relativePostedTime(job.postedAt ?? job.firstSeenAt)}
           </span>
-          {job.deadlineAt && (
-            <span style={{ fontSize: 12, color: "var(--color-error)" }}>
-              Apply by {job.deadlineAt.toLocaleDateString("en-US", { timeZone: "Asia/Kolkata" })}
-            </span>
-          )}
           <span className="job-card-arrow" aria-hidden="true">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 12h14M13 6l6 6-6 6" />

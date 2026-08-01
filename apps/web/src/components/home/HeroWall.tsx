@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import type { JobListItem } from "@/lib/jobQuery";
 import { CompanyLogo } from "@/components/CompanyLogo";
 
@@ -87,12 +88,30 @@ function bank(side: "l" | "r", depth: "near" | "far", cols: typeof COLS, jobs: J
   );
 }
 
-export function HeroWall({ jobs }: { jobs: JobListItem[] }) {
+export function HeroWall({ jobs, paused = false }: { jobs: JobListItem[]; paused?: boolean }) {
+  const wallRef = useRef<HTMLDivElement>(null);
+  // ~32 cards animate via CSS transform inside a masked, 3D-perspective
+  // container — cheap per frame individually, but with nothing gating it,
+  // it kept compositing forever even scrolled far off-screen, well after
+  // Hero itself was gone. Same fix as the homepage's Lottie players and the
+  // typed-search demo loop: pause via IntersectionObserver instead of
+  // running unconditionally. animation-play-state:paused (set in CSS off
+  // this data attribute) freezes mid-frame and resumes smoothly, rather
+  // than resetting position on re-entry.
+  const [inView, setInView] = useState(true);
+  useEffect(() => {
+    const el = wallRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { threshold: 0 });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   // Not enough real postings to fill four columns believably — skip the
   // wall rather than repeating the same 2-3 cards until it looks fake.
   if (jobs.length < 4) return null;
   return (
-    <div className="home-hero-wall" aria-hidden="true">
+    <div ref={wallRef} className="home-hero-wall" data-in-view={inView && !paused} aria-hidden="true">
       {bank("r", "far", COLS.slice(2, 4), jobs)}
     </div>
   );

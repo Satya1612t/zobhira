@@ -26,6 +26,7 @@ export function AdminJobsTable() {
   const [q, setQ] = useState("");
   const [source, setSource] = useState("");
   const [isActive, setIsActive] = useState("");
+  const [formatted, setFormatted] = useState("");
   const [loading, setLoading] = useState(false);
 
   // Free-text search is debounced (typing "software engineer" would
@@ -46,6 +47,7 @@ export function AdminJobsTable() {
     if (q) params.set("q", q);
     if (source) params.set("source", source);
     if (isActive) params.set("isActive", isActive);
+    if (formatted) params.set("formatted", formatted);
     adminFetch(`/api/jobs?${params}`)
       .then((res) => res.json())
       .then((data: { jobs: AdminJob[]; total: number }) => {
@@ -53,12 +55,13 @@ export function AdminJobsTable() {
         setTotal(data.total);
       })
       .finally(() => setLoading(false));
-  }, [page, q, source, isActive]);
+  }, [page, q, source, isActive, formatted]);
 
   const activeFilters = [
     q ? { key: "q", label: `"${q}"`, clear: () => { setQInput(""); setQ(""); } } : null,
     source ? { key: "source", label: source, clear: () => setSource("") } : null,
     isActive ? { key: "isActive", label: isActive === "true" ? "Active only" : "Inactive only", clear: () => setIsActive("") } : null,
+    formatted ? { key: "formatted", label: formatted === "true" ? "Formatted only" : "Unformatted only", clear: () => setFormatted("") } : null,
   ].filter((f): f is { key: string; label: string; clear: () => void } => f !== null);
 
   function clearAllFilters() {
@@ -66,6 +69,7 @@ export function AdminJobsTable() {
     setQ("");
     setSource("");
     setIsActive("");
+    setFormatted("");
     setPage(1);
   }
 
@@ -161,6 +165,18 @@ export function AdminJobsTable() {
             <option value="">Active + inactive</option>
             <option value="true">Active only</option>
             <option value="false">Inactive only</option>
+          </select>
+          <select
+            value={formatted}
+            onChange={(e) => {
+              setPage(1);
+              setFormatted(e.target.value);
+            }}
+            style={{ padding: "8px 12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--line)", fontSize: 13.5, color: "var(--ink)" }}
+          >
+            <option value="">All formatting</option>
+            <option value="true">Formatted only</option>
+            <option value="false">Unformatted only</option>
           </select>
           <span
             style={{

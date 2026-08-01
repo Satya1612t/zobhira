@@ -9,12 +9,14 @@ import { ContestDetailActions } from "@/components/ContestDetailActions";
 import { CONTEST_SELECT } from "@/lib/contestQuery";
 import { linkifyText } from "@/lib/linkify";
 import { buildIcsDataUri } from "@/lib/ics";
+import { SHOW_UNRELEASED_NAV } from "@/lib/authNavFlags";
 
 // Was force-dynamic — same ISR reasoning as jobs/[id]/page.tsx: content
 // only changes on the next scrape/reap cycle, not per-request.
 export const revalidate = 60;
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+  if (!SHOW_UNRELEASED_NAV) return { title: "Contest not found" };
   const contest = await prisma.contest.findUnique({
     where: { id: params.id },
     select: { title: true, organizer: true, summary: true, description: true },
@@ -36,6 +38,11 @@ const FACT_ICONS: Record<string, string> = {
 };
 
 export default async function ContestDetailPage({ params }: { params: { id: string } }) {
+  // Contests aren't ready for production yet — same gate as the nav links
+  // that point here (Navbar/Sidebar/Footer) and the /contest listing page.
+  // See authNavFlags.ts.
+  if (!SHOW_UNRELEASED_NAV) notFound();
+
   const { id } = params;
   const contest = await prisma.contest.findUnique({ where: { id }, select: CONTEST_SELECT });
 
