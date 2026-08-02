@@ -35,14 +35,36 @@ const jetbrainsMono = JetBrains_Mono({
 // metadataBase + a title template so every page (set via its own
 // `export const metadata`) gets a consistent "<Page> | Zobhira" <title>
 // and correctly-resolved absolute URLs for social/share previews.
+const SITE_TITLE = "Zobhira — Every technical job and contest on one board";
+const SITE_DESCRIPTION =
+  "Search technical roles and hackathons updated every morning. Dead listings removed automatically. Free, no account needed.";
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://zobhira.com"),
   title: {
-    default: "Zobhira — Every technical job and contest on one board",
+    default: SITE_TITLE,
     template: "%s | Zobhira",
   },
-  description:
-    "Search technical roles and hackathons updated every morning. Dead listings removed automatically. Free, no account needed.",
+  description: SITE_DESCRIPTION,
+  // No dedicated per-page openGraph/twitter blocks exist yet, so every page
+  // shared without its own override (most of them) previously fell back to
+  // whatever the sharing platform could scrape from the raw HTML — now it
+  // gets this site-wide default instead, using the same brand mark as the
+  // navbar/footer.
+  openGraph: {
+    type: "website",
+    url: "https://zobhira.com",
+    siteName: "Zobhira",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: ["/brand/zobhira-logo-dark.png"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: ["/brand/zobhira-logo-dark.png"],
+  },
 };
 
 // No app-shell here — the sidebar/navbar/footer chrome lives in

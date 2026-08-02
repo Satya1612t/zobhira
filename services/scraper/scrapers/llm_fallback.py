@@ -121,7 +121,23 @@ _JSON_FORMAT_SUFFIX = (
 def run_smart_scraper(prompt: str, source: str) -> dict:
     """Runs a SmartScraperGraph extraction against `source` — FreeLLMAPI
     first if configured, then each provider in `_PROVIDERS` in turn, until
-    one returns successfully."""
+    one returns successfully.
+
+    NEVER RAISES — same rule as utils/ai_extract.py's module docstring.
+    None of this function's three callers (linkedin.py/talentd.py/
+    ycombinator.py's `_scrape_with_llm`, only reached once the deterministic
+    selectors have already failed) catch anything around this call, so a
+    raised exception used to propagate all the way up to scheduler.py's
+    generic per-query handler — which does catch it and move on to the next
+    query, so nothing actually crashed, but it recorded scrapegraphai's raw
+    internal exception (live-confirmed case: a LangChain
+    `OutputParserException("Invalid json output: ...")` when the underlying
+    model answered with reasoning prose instead of the requested JSON) as
+    that source's `last_error`, which reads as a much scarier failure than
+    "this one query's LLM fallback found nothing." Returning `{"jobs": []}`
+    instead — like every other "no results" case already does — lets the
+    caller degrade exactly the way it already would for a page with no
+    matches, while still logging the real error for debugging."""
     from scrapegraphai.graphs import SmartScraperGraph
 
     prompt = prompt + _JSON_FORMAT_SUFFIX
@@ -167,13 +183,18 @@ def run_smart_scraper(prompt: str, source: str) -> dict:
             last_error = exc
 
     if last_error is not None:
-        raise last_error
-    if not tried_any:
-        raise RuntimeError(
-            "No LLM provider configured — set FREELLMAPI_BASE_URL + FREELLMAPI_API_KEY, "
-            "or GEMINI_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY"
+        logger.error(
+            "LLM extraction exhausted every configured provider for source=%s, "
+            "returning no results instead of crashing the caller: %s",
+            source, last_error,
         )
-    raise RuntimeError("All configured LLM providers failed")
+    elif not tried_any:
+        logger.error(
+            "run_smart_scraper called with no LLM provider configured — set "
+            "FREELLMAPI_BASE_URL + FREELLMAPI_API_KEY, or GEMINI_API_KEY, "
+            "ANTHROPIC_API_KEY, or OPENAI_API_KEY"
+        )
+    return {"jobs": []}
 
 
 def _build_chat_models() -> list[tuple[str, object]]:

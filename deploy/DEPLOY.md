@@ -1,11 +1,15 @@
 # Deploying to a single EC2 instance with Docker Compose
 
+> **OpenWA is currently disabled** (commented out in `docker-compose.prod.yml`,
+> not deleted) — not in use. The rest of this doc's OpenWA references describe
+> the setup from when it was active; skip them unless it's re-enabled.
+
 This runs the full stack — Postgres, the scraper API (with both background
 schedulers), the Next.js web app, a separate Firebase-authenticated admin app,
-a self-hosted FreeLLMAPI instance, self-hosted OpenWA (WhatsApp API) and n8n
-(workflow automation), and an Nginx reverse proxy with automatic Let's
-Encrypt TLS — as Docker containers on one EC2 instance, via
-`docker-compose.prod.yml` at the repo root.
+a self-hosted FreeLLMAPI instance, and n8n (workflow automation) — plus
+self-hosted OpenWA (WhatsApp API) when enabled — and an Nginx reverse proxy
+with automatic Let's Encrypt TLS — as Docker containers on one EC2 instance,
+via `docker-compose.prod.yml` at the repo root.
 
 This is a config/runbook only — it doesn't run itself. You (or a CI pipeline) apply it
 on the actual instance.
