@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { JOB_SELECT, jobOrderBy, getPopularSearches, getTotalSearchActivity } from "@/lib/jobQuery";
 import { CONTEST_SELECT, CONTEST_ORDER_BY } from "@/lib/contestQuery";
 import { Hero } from "@/components/home/Hero";
-import { TrustBar } from "@/components/home/TrustBar";
+// import { TrustBar } from "@/components/home/TrustBar";
 import { Services } from "@/components/home/Services";
 import { FeaturedRoles } from "@/components/home/FeaturedRoles";
 import { Trustability } from "@/components/home/Trustability";
@@ -114,7 +114,7 @@ export default async function HomePage() {
         tickerJobs={featuredJobs.slice(0, 8)}
         tickerContests={featuredContests.slice(0, 4)}
       />
-      <TrustBar companies={companyNames.map((c) => c.company)} />
+      {/* <TrustBar companies={companyNames.map((c) => c.company)} /> */}
       <Services />
       <FeaturedRoles jobs={featuredJobs} jobsCount={jobsCount} />
       <Trustability />

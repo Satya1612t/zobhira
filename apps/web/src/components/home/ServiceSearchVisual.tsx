@@ -1,7 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { DotLottieReact, type DotLottie } from "@lottiefiles/dotlottie-react";
+import dynamic from "next/dynamic";
+import type { DotLottie } from "@lottiefiles/dotlottie-react";
+
+// Lazy-load the dotlottie player instead of importing it at module top. The
+// @lottiefiles/dotlottie-react package is a large WASM-backed renderer;
+// eagerly bundling it put its whole parse/execute cost on the main thread
+// during the home page's initial hydration — before any Lottie was even on
+// screen — which was the main source of the reported home-page lag.
+// next/dynamic code-splits it into its own chunk that loads asynchronously
+// (ssr:false since it's client-only, decorative, aria-hidden), so first
+// paint + interactivity no longer wait on it. `import type` above is erased
+// at build, so it adds no runtime cost. Off-screen playback is still paused
+// by the IntersectionObserver below.
+const DotLottieReact = dynamic(
+  () => import("@lottiefiles/dotlottie-react").then((m) => m.DotLottieReact),
+  { ssr: false, loading: () => null }
+);
 
 // Shared by the service cards that use a Lottie animation instead of a
 // static <Figure> image — fills the parent <AspectBox> exactly like the
