@@ -7,7 +7,10 @@ import { auth, googleProvider } from "@/lib/firebase";
 type AuthState = {
   user: User | null;
   loading: boolean;
-  signInWithGoogle: () => Promise<void>;
+  // Returns the freshly signed-in user, so the caller can read the ID token
+  // straight off it instead of racing onAuthStateChanged to populate
+  // auth.currentUser.
+  signInWithGoogle: () => Promise<User>;
   signOutUser: () => Promise<void>;
   rejectUnauthorizedUser: () => Promise<void>;
 };
@@ -26,7 +29,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signInWithGoogle = async () => {
-    await signInWithPopup(auth, googleProvider);
+    const credential = await signInWithPopup(auth, googleProvider);
+    return credential.user;
   };
 
   const signOutUser = async () => {

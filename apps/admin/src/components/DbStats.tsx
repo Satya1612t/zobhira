@@ -4,10 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import { adminFetch } from "@/lib/adminFetch";
 
 const SOURCE_LABELS: Record<string, string> = {
-  ycombinator: "Y Combinator",
-  talentd: "Talentd",
-  linkedin: "LinkedIn",
+  greenhouse: "Greenhouse",
+  lever: "Lever",
+  ashby: "Ashby",
+  smartrecruiters: "SmartRecruiters",
+  workable: "Workable",
+  recruitee: "Recruitee",
+  adzuna: "Adzuna",
+  jooble: "Jooble",
+  careerjet: "Careerjet",
   himalayas: "Himalayas",
+  dev_community: "DEV Community",
 };
 
 type SourceCount = { source: string; total: number; active: number };

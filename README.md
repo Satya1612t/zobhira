@@ -1,22 +1,28 @@
 # Job Portal (Zobhira)
 
-A searchable job board aggregating technical roles from LinkedIn, Y Combinator / Work at
-a Startup, Talentd, and Himalayas — plus a companion contest/hackathon aggregator sourced
-from public RSS/JSON feeds (DEV Community). Both are kept fresh by background scrapers
-and enriched with an optional, self-hostable LLM pass for cleaner descriptions and
-highlighted facts. The product is branded **Zobhira**; no third-party/scraper source names
-are ever surfaced in the UI (see [Notes](#notes)).
+A searchable job board for the Indian market, aggregating technical roles primarily from a
+**feed layer** that reads companies' public hiring-board JSON APIs directly
+(Greenhouse/Lever/Ashby/SmartRecruiters/Workable/Recruitee) plus job-search aggregators
+(Adzuna/Jooble/Careerjet) — with a shrinking set of legacy scrapers (now just Himalayas for
+jobs) alongside. A companion contest/hackathon aggregator is sourced from public RSS/JSON
+feeds (DEV Community). Everything is kept fresh by background schedulers and enriched with
+an optional, self-hostable LLM pass for cleaner descriptions. The product is branded
+**Zobhira**; no third-party/source names are ever surfaced in the UI (see [Notes](#notes)).
+
+> **Note:** LinkedIn, Talentd and YCombinator were retired once the feed layer covered their
+> role with cleaner, direct-apply data, and **Playwright + ScrapeGraphAI were removed** with
+> the last browser-driven scraper. The feed layer is the primary ingestion path now.
 
 ## Structure
 - `apps/web` — Next.js 14 (App Router) job/contest listing and search UI, Prisma + Postgres
 - `apps/admin` — separate Next.js 14 app, its own Prisma client against the same Postgres
-  database; unauthenticated management UI (jobs/contests CRUD, scraper source
-  enable/disable, live scheduler progress + manual triggers). Deployed as its own
-  container on its own subdomain, not a path on the public site — see
-  [Deployment](#deployment).
-- `services/scraper` — Python scraping microservice (Playwright + httpx, ScrapeGraphAI for
-  LLM fallback), writes directly to Postgres; exposes a FastAPI app (`api.py`) that also
-  runs the background schedulers and on-demand endpoints in-process
+  database; **Firebase-authenticated** management UI (jobs/contests CRUD, source
+  enable/disable, a **Companies** page to manage feed companies, live scheduler progress +
+  manual triggers). Deployed as its own container on its own subdomain, not a path on the
+  public site — see [Deployment](#deployment).
+- `services/scraper` — Python ingestion microservice (httpx-based; **no Playwright**), writes
+  directly to Postgres; exposes a FastAPI app (`api.py`) that also runs four background
+  schedulers and on-demand endpoints in-process. `feeds/` is the v2 feed layer (primary path).
 - `db/migrations` — plain SQL migrations, source of truth for the schema
 - `deploy` — production Docker deployment runbook (see [Deployment](#deployment) below)
 
@@ -32,18 +38,22 @@ are ever surfaced in the UI (see [Notes](#notes)).
    psql -h localhost -U postgres -d job_portal -f db/migrations/000X_something.sql
    ```
 
-2. **Run a scrape:**
+2. **Run an ingestion pass:**
    ```
    cd services/scraper
-   pip install -e .
-   playwright install chromium
-   copy .env.example .env   # fill in DATABASE_URL (+ optional LLM keys, see below)
-   python -m scripts.run_scrape --source ycombinator --query "software engineer"
-   python -m scripts.run_scrape --source talentd --query "software engineer"
-   python -m scripts.run_scrape --source linkedin --query "software engineer"
+   pip install -e .              # no `playwright install` — no browser deps anymore
+   copy .env.example .env        # fill in DATABASE_URL (+ optional LLM/aggregator keys, see below)
+   # v2 feed layer (primary path) — ATS boards + aggregators:
+   python -m scripts.seed_registry                                     # load db/seeds/company_registry.csv
+   python -m scripts.run_feed --provider greenhouse --dry-run --no-llm # preview, writes nothing
+   python -m scripts.run_feed --provider greenhouse --no-llm           # live
+   python -m scripts.detect_ats --url https://acme.com/careers --write # auto-add a company by careers URL
+   # v1 remnant (Himalayas jobs + DEV Community contests):
    python -m scripts.run_scrape --source himalayas --query "software engineer"
    python -m scripts.run_contest_scrape --source dev_community
    ```
+   `--no-llm` is recommended while the LLM provider chain is billing-blocked (it skips the
+   AI classification/formatting steps; postings still save with deterministic formatting).
 
 3. **Run the scraper API** (needed for `/progress`, the background schedulers, and the
    on-demand LLM description formatting):
@@ -73,33 +83,40 @@ are ever surfaced in the UI (see [Notes](#notes)).
    ```
    cd apps/admin
    npm install
-   copy .env.example .env   # DATABASE_URL + SCRAPER_API_URL (defaults to localhost:8000)
+   copy .env.example .env   # DATABASE_URL + SCRAPER_API_URL + Firebase (NEXT_PUBLIC_FIREBASE_*,
+                            # FIREBASE_ADMIN_*) + ADMIN_ALLOWED_EMAILS
    npx prisma generate
    npm run dev
    ```
-   Visit http://localhost:3002 — unauthenticated, so don't expose this port beyond
-   your own machine in local dev.
+   Visit http://localhost:3002 — **Firebase-gated even locally**: you must set the
+   `FIREBASE_*` env vars and put your Google account's email in `ADMIN_ALLOWED_EMAILS`,
+   or sign-in will fail. Still, don't expose this port beyond your own machine in dev.
 
 ## Schedulers
 
-Two separate schedulers run inside the `api.py` process, each with its own lock (a
-job sweep and a contest sweep can run concurrently — neither drives Playwright at the
-same volume, so there's no contention risk like there is *within* a family):
+Four separate schedulers run inside the `api.py` process, each with its own lock (all run
+plain HTTP/JSON now — no Playwright anywhere — so there's no cross-family contention):
 
-**Jobs** (`scheduler.py`) — tiered by real-world posting volume:
+**v2 feeds** (`feed_scheduler.py`) — the primary path, tiered by `company_registry.tier`:
+
+| Tier | Cadence | Population |
+|---|---|---|
+| Tier 1 | Every 15 min | Hottest companies (auto-promoted by apply-click volume) |
+| Tier 2 | Hourly | The middle |
+| Tier 3 | Daily (05:00 local) | Long tail + the aggregators (Adzuna/Jooble/Careerjet, daily-only) |
+| Auto-tiering (apply-click → tier 1) | Daily (05:30 local) | — |
+
+Manual triggers: `POST /feeds/scheduler/trigger/{provider}`, progress `GET /feeds/scheduler/progress`.
+
+**v1 jobs** (`scheduler.py`) — Himalayas only now (LinkedIn/Talentd/YCombinator retired):
 
 | Source | Cadence | Time |
 |---|---|---|
-| LinkedIn | Daily | 02:00 local |
 | Himalayas | Daily | 02:00 local |
-| Talentd | Every 2 days | 02:00 local |
-| YCombinator | Every 3 days | 02:00 local |
-| LinkedIn (recent user searches) | 3x/week (Mon/Wed/Fri) | 1h after the daily LinkedIn sweep finishes |
 | Reap stale jobs (`is_active=false` if unscraped 30+ days) | Every 24h | — |
 | Reap expired jobs (deadline passed, or 30+ days old with none) | Every 24h | — |
 
-Manual triggers: `POST /scheduler/trigger/{source}` (`linkedin`/`talentd`/
-`ycombinator`), `POST /scheduler/trigger/recent-searches/linkedin`. Progress:
+Manual triggers: `POST /scheduler/trigger/{source}` (`himalayas`). Progress:
 `GET /scheduler/progress`.
 
 **Contests** (`contest_scheduler.py`) — currently DEV Community only (Devpost was
@@ -239,24 +256,25 @@ for the full EC2 setup runbook. The plain `docker-compose.yml` at the root (Post
 only) is untouched and still used for local dev as described above.
 
 ## Notes
-- Deterministic parsing (CSS selectors / JSON APIs) is the default scraping path for
-  every source; the LLM-driven fallback is only used when a source's expected structure
-  breaks.
-- **Logo / description / posted-date coverage varies by source** — most only expose full
-  details on each job's individual detail page, not the search results list:
-  - **YCombinator**: logo + full description from each job's detail page. No posted date
-    exists anywhere on the site — this field is always empty for YC.
-  - **Talentd**: logo + full description + posted date + real numeric salary, all from a
-    schema.org `JobPosting` JSON-LD block embedded in each detail page.
-  - **LinkedIn**: posted date from the list view; logo + description from each job's
-    detail page (a handful of listings are expired/malformed and simply have no
-    description to fetch).
-  - **DEV Community** (contests): no structured deadline/prize/mode at all — these are
-    gap-filled from the post's own prose via the LLM pass described above when present.
-  - **Himalayas**: logo + full description from each job's detail page, similar shape to
-    LinkedIn's enrichment pass.
-- **No third-party/scraper branding is ever shown in the UI** — `job.source`/`contest.platform`
-  exist purely as DB/filter fields. There's no "via LinkedIn" badge, no platform-name filter
+- **Ingestion is now feed-first.** The v2 feed layer (`services/scraper/feeds/`) reads
+  companies' public hiring-board JSON APIs directly (Greenhouse/Lever/Ashby/SmartRecruiters/
+  Workable/Recruitee, keyed off `company_registry`) plus job-search aggregators (Adzuna/
+  Jooble/Careerjet). All structured JSON, no browser. Aggregator postings have indirect
+  apply links, so they're flagged and rank below direct ATS jobs. Grow the company list via
+  `scripts/detect_ats.py` or the admin **Companies** page.
+- **Feed etag gotcha:** the ATS connectors use conditional GET (per-company etag). If you
+  truncate the `jobs` table, also clear `company_registry.etag`/`last_modified` — otherwise
+  the next run gets `304 Not Modified` for everything and repopulates almost nothing.
+- **LinkedIn, Talentd and YCombinator were retired** once the feed layer covered them with
+  cleaner direct-apply data, and **Playwright + ScrapeGraphAI were removed** with the last
+  browser scraper. The only v1 job scraper left is **Himalayas** (a plain JSON API — logo +
+  full description from each job's detail page). Contests: **DEV Community** only (no
+  structured deadline/prize/mode — gap-filled from the post's prose via the LLM pass).
+  On-demand "live search" is disabled (it needed the now-retired per-query scrapers).
+- Deterministic parsing (JSON APIs / CSS selectors) is the default path for every source;
+  the LLM pass is optional and only cleans up descriptions.
+- **No third-party/source branding is ever shown in the UI** — `job.source`/`contest.platform`
+  exist purely as DB/filter fields. There's no "via <source>" badge, no platform-name filter
   pills, no named-source copy on About/Privacy. Keep this invariant when adding new UI.
 - **Naukri, Indeed, and RemoteOK were removed entirely** (scrapers, config, historical
   rows). Naukri was confirmed blocked at the bot-detection level (Akamai/bot-manager-level

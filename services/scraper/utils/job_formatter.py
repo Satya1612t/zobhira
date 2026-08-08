@@ -82,7 +82,7 @@ _JSON_SHAPE_HINT = (
 )
 
 
-def format_job_description(description: str | None) -> dict:
+def format_job_description(description: str | None, use_llm: bool = True) -> dict:
     """Restructures a raw scraped job description into distinct sections
     (overview / responsibilities / requirements / nice-to-have / benefits /
     details) plus up to 6 short highlight facts — PRESERVES all original
@@ -94,7 +94,13 @@ def format_job_description(description: str | None) -> dict:
     on-demand (one job at a time, on first detail-page view), not in a
     batch pipeline, so a failure here must never break the page, and the
     deterministic cleanup alone is still a real improvement over showing
-    the fully raw description."""
+    the fully raw description.
+
+    use_llm=False skips the LLM call entirely and returns the
+    deterministic-cleanup fallback directly — for a caller (e.g.
+    feeds/scripts/run_feed.py) that wants guaranteed-fast, guaranteed-non-
+    network formatting rather than paying the retry cost of a
+    fully-exhausted/billing-blocked provider chain."""
     # llm_used distinguishes "the real structuring pass ran" from "fell back
     # to deterministic cleanup only" — the on-demand caller doesn't care
     # (either result is fine to cache/show), but the scrape-time circuit
@@ -112,6 +118,8 @@ def format_job_description(description: str | None) -> dict:
     fallback = {"formatted_description": cleaned or None, "highlights": [], "llm_used": False}
     if not cleaned:
         return empty
+    if not use_llm:
+        return fallback
 
     # Lazy import, not module-top — llm_fallback.py reads
     # FREELLMAPI_BASE_URL/FREELLMAPI_API_KEY from os.environ at IMPORT

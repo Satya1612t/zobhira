@@ -6,7 +6,7 @@ import { extractTechnologies, extractExperience, extractEmail, flattenFormatted 
 import { inferJobSignals } from "@/lib/dispatchLlm";
 import { SHOW_UNRELEASED_NAV } from "@/lib/authNavFlags";
 
-const VALID_PLATFORMS = ["telegram", "whatsapp", "instagram", "youtube"];
+const VALID_PLATFORMS = ["telegram", "whatsapp", "instagram", "youtube", "linkedin"];
 const SITE_ORIGIN = "https://zobhira.com";
 
 // "We can share 2 posts at a time" — a single combined cap per call.
@@ -28,11 +28,16 @@ const BATCH_SIZE = 2;
 // an explicit call to accept that gap rather than sit on zero fresher
 // candidates from the other three sources.
 //
-// YCombinator excluded from Telegram dispatch — its postings never carry a
-// real `posted_at` (that source doesn't expose one; see jobInsights/dispatch
-// discussion), so "newest first" for YC is only ever scrape-date ordering,
-// not genuine posting recency.
-const SOURCE_ROTATION = ["linkedin", "talentd", "himalayas"];
+// The v2 feed layer's direct-apply ATS sources + Himalayas. LinkedIn,
+// Talentd and YCombinator were retired. The aggregators (adzuna/jooble/
+// careerjet) are deliberately excluded: their apply links are indirect
+// (redirect through the aggregator, flagged_indirect) and their descriptions
+// are preview-only, which makes for poor Telegram posts — dispatch should
+// send followers straight to a real employer/ATS application, not an
+// aggregator bounce page.
+const SOURCE_ROTATION = [
+  "greenhouse", "lever", "ashby", "smartrecruiters", "workable", "recruitee", "himalayas",
+];
 
 type JobRow = {
   id: string;

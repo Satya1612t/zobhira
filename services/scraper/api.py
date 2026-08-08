@@ -1,4 +1,5 @@
 import logging
+import re
 import threading
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -11,6 +12,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 import contest_scheduler
+import feed_scheduler
 import scheduler
 import skill_miner_scheduler
 from db.repository import connect, flag_if_repost, get_job, update_job_formatting, upsert_job
@@ -47,23 +49,13 @@ def _start_background_scheduler() -> None:
         CronTrigger(hour=scheduler.RUN_AT.hour, minute=scheduler.RUN_AT.minute),
         max_instances=1, coalesce=True,
     )
-    bg.add_job(
-        scheduler.scrape_every_2_days,
-        IntervalTrigger(days=2, start_date=scheduler._next_run_at(scheduler.RUN_AT.hour, scheduler.RUN_AT.minute)),
-        max_instances=1, coalesce=True,
-    )
-    bg.add_job(
-        scheduler.scrape_every_3_days,
-        IntervalTrigger(days=3, start_date=scheduler._next_run_at(scheduler.RUN_AT.hour, scheduler.RUN_AT.minute)),
-        max_instances=1, coalesce=True,
-    )
     bg.add_job(scheduler.reap_stale_jobs, "interval", hours=scheduler.REAP_EVERY_HOURS, next_run_time=None)
     bg.add_job(scheduler.reap_expired_jobs, "interval", hours=scheduler.REAP_EVERY_HOURS, next_run_time=None)
     bg.add_job(scheduler.prune_analytics_job, "interval", hours=24, next_run_time=None)
     bg.start()
     logger.info(
-        "Background scheduler started: linkedin daily, talentd every 2 "
-        "days, ycombinator every 3 days, all at %02d:%02d local",
+        "Background scheduler started: himalayas daily at %02d:%02d local "
+        "(linkedin + talentd + ycombinator retired; Playwright removed)",
         scheduler.RUN_AT.hour, scheduler.RUN_AT.minute,
     )
 
@@ -102,6 +94,102 @@ def trigger_contest_scheduler(source: str):
     if not started:
         return {"started": False, "reason": "a contest sweep is already running"}
     return {"started": True}
+
+
+@app.on_event("startup")
+def _start_feed_background_scheduler() -> None:
+    """A FOURTH, separate BackgroundScheduler/lock (see feed_scheduler.py)
+    — v2's feed connectors are plain HTTP polls (no Playwright), so this has
+    no contention reason to share a lock with any of the other three.
+    Stage 7 tiered cadence: tier-1 companies every 15 min, tier-2 hourly,
+    tier-3 (long tail) daily, plus a daily apply-click auto-tiering pass —
+    all mirroring feed_scheduler.main()."""
+    bg = BackgroundScheduler()
+    bg.add_job(
+        feed_scheduler.poll_tier1,
+        IntervalTrigger(minutes=feed_scheduler.FEED_TIER1_INTERVAL_MIN),
+        max_instances=1, coalesce=True,
+    )
+    bg.add_job(
+        feed_scheduler.poll_tier2,
+        IntervalTrigger(minutes=feed_scheduler.FEED_TIER2_INTERVAL_MIN),
+        max_instances=1, coalesce=True,
+    )
+    bg.add_job(
+        feed_scheduler.poll_feeds_daily,
+        CronTrigger(hour=feed_scheduler.FEED_RUN_AT.hour, minute=feed_scheduler.FEED_RUN_AT.minute),
+        max_instances=1, coalesce=True,
+    )
+    bg.add_job(
+        feed_scheduler.promote_tiers_job,
+        CronTrigger(hour=feed_scheduler.FEED_RUN_AT.hour, minute=30),
+        max_instances=1, coalesce=True,
+    )
+    bg.start()
+    logger.info(
+        "Feed background scheduler started: tier1 every %dmin, tier2 every %dmin, tier3 daily %02d:%02d, auto-tiering daily %02d:30",
+        feed_scheduler.FEED_TIER1_INTERVAL_MIN, feed_scheduler.FEED_TIER2_INTERVAL_MIN,
+        feed_scheduler.FEED_RUN_AT.hour, feed_scheduler.FEED_RUN_AT.minute, feed_scheduler.FEED_RUN_AT.hour,
+    )
+
+
+@app.get("/feeds/scheduler/progress")
+def get_feed_scheduler_progress():
+    return feed_scheduler.get_feed_progress()
+
+
+@app.post("/feeds/scheduler/trigger/{source}")
+def trigger_feed_scheduler(source: str):
+    if source not in feed_scheduler.FEED_SOURCE_TIER:
+        return {"started": False, "reason": f"Unknown feed provider: {source!r}"}
+    started = feed_scheduler.trigger_feed(source)
+    if not started:
+        return {"started": False, "reason": "a feed sweep is already running"}
+    return {"started": True}
+
+
+class DetectCompanyRequest(BaseModel):
+    url: str
+    name: str | None = None
+
+
+@app.post("/feeds/companies/detect")
+def detect_and_add_company(body: DetectCompanyRequest):
+    """Runs the ATS auto-detection (scripts/detect_ats.py) on a careers-page
+    URL and, if a real+verified board is found, upserts it into
+    company_registry — the server-side engine behind the admin "add a
+    company by pasting its careers URL" flow. Returns the detected
+    provider/token on success, or a reason on failure (no ATS found, or the
+    detected board had no live postings). Detection is Python-only (regex +
+    live API probing), which is why this lives here, not in the admin app's
+    Prisma layer."""
+    from scripts.detect_ats import detect
+
+    result = detect(body.url, body.name)
+    if not result:
+        return {"detected": False, "reason": "No supported ATS (or no live postings) found for that URL."}
+    provider, token = result
+
+    slug = re.sub(r"[^a-z0-9]+", "-", (body.name or token).lower()).strip("-")
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO company_registry (name, slug, ats_provider, ats_token, careers_url, country_hint, tier)
+                VALUES (%(name)s, %(slug)s, %(provider)s, %(token)s, %(careers_url)s, 'IN', 2)
+                ON CONFLICT (ats_provider, ats_token) DO UPDATE SET
+                    name = EXCLUDED.name, careers_url = EXCLUDED.careers_url, is_active = true
+                RETURNING id
+                """,
+                {"name": body.name or token, "slug": slug, "provider": provider, "token": token, "careers_url": body.url},
+            )
+            row = cur.fetchone()
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {"detected": True, "provider": provider, "token": token, "name": body.name or token, "id": row["id"] if row else None}
 
 
 @app.on_event("startup")
@@ -150,25 +238,15 @@ def trigger_scheduler(source: str):
     return {"started": True}
 
 
-@app.post("/scheduler/trigger/recent-searches/linkedin")
-def trigger_recent_searches_sweep():
-    """Manual/testing path for scrape_recent_searches_linkedin() — bypasses
-    the weekday check and 1-hour delay that gate it in normal operation
-    (see scheduler._maybe_chain_recent_searches_sweep), but still goes
-    through the same _lock as every other sweep."""
-    if scheduler._lock.locked():
-        return {"started": False, "reason": "a sweep is already running"}
-    thread = threading.Thread(target=scheduler.scrape_recent_searches_linkedin, daemon=True)
-    thread.start()
-    return {"started": True}
-
-# LinkedIn is listed first since it's usually the biggest contributor of
-# results. Naukri, Indeed, and RemoteOK were all removed entirely (scrapers,
-# config, and historical DB rows) — Naukri was confirmed blocked at the
-# bot-detection level, Indeed's mandatory-description rule left it with ~1
-# usable posting per query, and RemoteOK gates its real application link
-# behind a mandatory account signup for most listings (see README Notes).
-LIVE_SEARCH_SOURCES = ["linkedin", "ycombinator", "talentd"]
+# Empty now — on-demand "live search" fundamentally needs a scraper it can
+# fire per query, and every such scraper (LinkedIn/Talentd/YCombinator, plus
+# earlier Naukri/Indeed/RemoteOK) has been retired (the plan's §9). The
+# remaining sources are all scheduled feeds/JSON boards, not per-query
+# scrapers, so the live-search endpoints below simply return no new results
+# (they no-op cleanly over an empty list rather than erroring). Kept as a
+# list so live search can be re-enabled instantly if a per-query source is
+# ever added back.
+LIVE_SEARCH_SOURCES: list[str] = []
 
 # First pass enriches only the 5 latest matching postings per source (fast);
 # scrolling to the bottom of the results fetches 5 more per source that

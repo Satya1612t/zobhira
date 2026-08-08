@@ -144,13 +144,20 @@ export default async function JobDetailPage({
         "@type": "JobPosting",
         title: job.title,
         description: job.description ?? job.title,
-        datePosted: job.postedAt?.toISOString(),
+        // Anchor both dates on firstSeenAt (every row has it) when the
+        // source gave no postedAt — many feed jobs don't. datePosted is a
+        // required JobPosting field, so falling back to render time / null
+        // is wrong; firstSeenAt is a real, stable timestamp. It also fixes
+        // validThrough below: computing it from `new Date()` when postedAt
+        // is null re-pushed the expiry 30 days out on *every* crawl, so
+        // those listings never expired in Google's eyes.
+        datePosted: (job.postedAt ?? job.firstSeenAt).toISOString(),
         // Google drops job postings without validThrough after ~30 days —
-        // fall back to postedAt + 30 days (the same window listings get
-        // deactivated on) when there's no real deadline, so this always
-        // matches actual behavior rather than staying open indefinitely.
+        // fall back to (postedAt|firstSeenAt) + 30 days (the same window
+        // listings get deactivated on) when there's no real deadline, so
+        // this matches actual behavior rather than staying open forever.
         validThrough: (
-          job.deadlineAt ?? new Date((job.postedAt ?? new Date()).getTime() + 30 * 24 * 60 * 60 * 1000)
+          job.deadlineAt ?? new Date((job.postedAt ?? job.firstSeenAt).getTime() + 30 * 24 * 60 * 60 * 1000)
         ).toISOString(),
         hiringOrganization: {
           "@type": "Organization",

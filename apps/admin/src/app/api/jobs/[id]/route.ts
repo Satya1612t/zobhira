@@ -12,7 +12,15 @@ export async function GET(
 
   const job = await prisma.job.findUnique({ where: { id: params.id } });
   if (!job) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(job);
+  // companyId is a Postgres BIGINT (company_registry.id) -> Prisma BigInt,
+  // which JSON.stringify (and therefore NextResponse.json) cannot serialize
+  // natively. Cast to a plain number for the response only — safe here
+  // since company_registry is a small (dozens-to-low-thousands row) table,
+  // nowhere near Number.MAX_SAFE_INTEGER.
+  return NextResponse.json({
+    ...job,
+    companyId: job.companyId === null ? null : Number(job.companyId),
+  });
 }
 
 export async function PATCH(

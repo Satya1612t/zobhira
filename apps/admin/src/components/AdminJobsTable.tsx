@@ -16,7 +16,21 @@ type AdminJob = {
   deadlineAt: string | null;
 };
 
-const SOURCES = ["", "linkedin", "talentd", "ycombinator", "himalayas"];
+// Current ingestion sources (LinkedIn/Talentd/YCombinator retired). Value is
+// the raw `jobs.source` string the filter queries on; label is human-readable.
+const SOURCES: { value: string; label: string }[] = [
+  { value: "", label: "All sources" },
+  { value: "greenhouse", label: "Greenhouse" },
+  { value: "lever", label: "Lever" },
+  { value: "ashby", label: "Ashby" },
+  { value: "smartrecruiters", label: "SmartRecruiters" },
+  { value: "workable", label: "Workable" },
+  { value: "recruitee", label: "Recruitee" },
+  { value: "adzuna", label: "Adzuna" },
+  { value: "jooble", label: "Jooble" },
+  { value: "careerjet", label: "Careerjet" },
+  { value: "himalayas", label: "Himalayas" },
+];
 
 export function AdminJobsTable() {
   const { showToast } = useToast();
@@ -149,8 +163,8 @@ export function AdminJobsTable() {
             style={{ padding: "8px 12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--line)", fontSize: 13.5, color: "var(--ink)" }}
           >
             {SOURCES.map((s) => (
-              <option key={s} value={s}>
-                {s || "All sources"}
+              <option key={s.value} value={s.value}>
+                {s.label}
               </option>
             ))}
           </select>

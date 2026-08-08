@@ -22,8 +22,12 @@ export default function AdminLoginPage() {
   async function handleGoogleSignIn() {
     setPending(true);
     try {
-      await signInWithGoogle();
-      const idToken = await (await import("@/lib/firebase")).auth.currentUser?.getIdToken();
+      // Read the token straight off the just-signed-in user, not
+      // auth.currentUser (which can still be null right after the popup
+      // resolves, before onAuthStateChanged fires — the exact race that
+      // produced a `Bearer undefined` → "Invalid or expired token").
+      const signedInUser = await signInWithGoogle();
+      const idToken = await signedInUser.getIdToken();
       const res = await fetch("/api/auth/check", {
         headers: { Authorization: `Bearer ${idToken}` },
       });

@@ -12,6 +12,35 @@ type ScraperSource = {
   lastErrorAt: string | null;
 };
 
+// Human labels + which bucket each source belongs to, so the flat DB list
+// (raw machine names like "smartrecruiters"/"dev_community") reads clearly.
+// Order of CATEGORY_ORDER is the display order of the groups.
+const CATEGORY_ORDER = ["ATS feed", "Aggregator", "Legacy scraper", "Contest"] as const;
+type Category = (typeof CATEGORY_ORDER)[number];
+
+const SOURCE_META: Record<string, { label: string; category: Category }> = {
+  greenhouse: { label: "Greenhouse", category: "ATS feed" },
+  lever: { label: "Lever", category: "ATS feed" },
+  ashby: { label: "Ashby", category: "ATS feed" },
+  smartrecruiters: { label: "SmartRecruiters", category: "ATS feed" },
+  workable: { label: "Workable", category: "ATS feed" },
+  recruitee: { label: "Recruitee", category: "ATS feed" },
+  adzuna: { label: "Adzuna", category: "Aggregator" },
+  jooble: { label: "Jooble", category: "Aggregator" },
+  careerjet: { label: "Careerjet", category: "Aggregator" },
+  himalayas: { label: "Himalayas", category: "Legacy scraper" },
+  dev_community: { label: "DEV Community", category: "Contest" },
+};
+
+function metaFor(source: ScraperSource): { label: string; category: Category } {
+  // Fallback for any source not in the map yet (e.g. a newly registered
+  // provider) — show its raw name, bucket by family.
+  return SOURCE_META[source.name] ?? {
+    label: source.name,
+    category: source.family === "contest" ? "Contest" : "Legacy scraper",
+  };
+}
+
 export function AdminSourcesTable() {
   const { showToast } = useToast();
   const [sources, setSources] = useState<ScraperSource[]>([]);
@@ -43,73 +72,91 @@ export function AdminSourcesTable() {
 
   if (loading) return null;
 
+  // Group sources by category, in CATEGORY_ORDER; within a group, sort by label.
+  const grouped = CATEGORY_ORDER.map((category) => ({
+    category,
+    items: sources
+      .filter((s) => metaFor(s).category === category)
+      .sort((a, b) => metaFor(a).label.localeCompare(metaFor(b).label)),
+  })).filter((g) => g.items.length > 0);
+
   return (
-    <div
-      style={{
-        borderRadius: "var(--radius)",
-        border: "1px solid var(--line)",
-        background: "var(--surface)",
-        overflow: "hidden",
-      }}
-    >
-      {sources.map((source) => (
-        <div
-          key={source.name}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "12px 16px",
-            borderBottom: "1px solid var(--line)",
-          }}
-        >
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontWeight: 600, fontSize: 14, color: "var(--ink)" }}>{source.name}</span>
-              <span
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 10.5,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.4,
-                  padding: "2px 7px",
-                  borderRadius: 999,
-                  background: "var(--surface-hover)",
-                  color: "var(--ink-faint)",
-                  border: "1px solid var(--line)",
-                }}
-              >
-                {source.family}
-              </span>
-            </div>
-            {source.lastError && (
-              <div style={{ marginTop: 6, fontSize: 12, color: "var(--warn)" }}>
-                {source.lastError}
-                {source.lastErrorAt && (
-                  <span style={{ color: "var(--ink-faint)" }}>
-                    {" "}
-                    · {new Date(source.lastErrorAt).toLocaleString("en-US")}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-          <button
-            onClick={() => toggleEnabled(source)}
+    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      {grouped.map(({ category, items }) => (
+        <div key={category}>
+          <h3
             style={{
-              padding: "6px 14px",
-              borderRadius: "var(--radius-sm)",
-              border: "1px solid var(--line)",
-              background: source.enabled ? "var(--accent)" : "var(--surface-hover)",
-              color: source.enabled ? "var(--accent-ink)" : "var(--ink-faint)",
-              fontSize: 12.5,
-              fontWeight: 600,
-              cursor: "pointer",
-              flexShrink: 0,
+              margin: "0 0 8px",
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: "var(--ink-faint)",
             }}
           >
-            {source.enabled ? "Enabled" : "Disabled"}
-          </button>
+            {category}
+            <span style={{ marginLeft: 8, color: "var(--ink-faint)", fontWeight: 600 }}>{items.length}</span>
+          </h3>
+          <div
+            style={{
+              borderRadius: "var(--radius)",
+              border: "1px solid var(--line)",
+              background: "var(--surface)",
+              overflow: "hidden",
+            }}
+          >
+            {items.map((source) => {
+              const { label } = metaFor(source);
+              return (
+                <div
+                  key={source.name}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "12px 16px",
+                    borderBottom: "1px solid var(--line)",
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: 600, fontSize: 14, color: "var(--ink)" }}>{label}</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--ink-faint)" }}>
+                        {source.name}
+                      </span>
+                    </div>
+                    {source.lastError && (
+                      <div style={{ marginTop: 6, fontSize: 12, color: "var(--warn)" }}>
+                        {source.lastError}
+                        {source.lastErrorAt && (
+                          <span style={{ color: "var(--ink-faint)" }}>
+                            {" "}
+                            · {new Date(source.lastErrorAt).toLocaleString("en-US")}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => toggleEnabled(source)}
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: "var(--radius-sm)",
+                      border: "1px solid var(--line)",
+                      background: source.enabled ? "var(--accent)" : "var(--surface-hover)",
+                      color: source.enabled ? "var(--accent-ink)" : "var(--ink-faint)",
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {source.enabled ? "Enabled" : "Disabled"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </div>
       ))}
     </div>

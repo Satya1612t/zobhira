@@ -234,7 +234,7 @@ export function AdminJobDetail({ id }: { id: string }) {
 
       <Section title="Admin-only — not shown on the public site">
         <Field label="Active" value={job.isActive ? "Active — visible in listings" : "Inactive — hidden from listings"} visible={false} note="Controls whether this job appears at all, but isn't rendered as a field itself." />
-        <Field label="Source" value={job.source} visible={false} note="Scraper origin (linkedin/talentd/etc.) — deliberately never surfaced to visitors." />
+        <Field label="Source" value={job.source} visible={false} note="Ingestion origin (greenhouse/lever/adzuna/etc.) — deliberately never surfaced to visitors." />
         <Field label="Seniority" value={fmt(job.seniority)} visible={false} note="Structured only for some sources; not part of the public job-detail select." />
         <Field label="Extraction method" value={job.extractionMethod} visible={false} />
         <Field label="First seen" value={fmtDate(job.firstSeenAt)} visible={false} />

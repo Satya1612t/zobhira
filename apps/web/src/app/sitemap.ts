@@ -32,12 +32,18 @@ const STATIC_ROUTES: Array<{
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  // `formattedDescription: { not: null }` mirrors the detail page's own
+  // visibility gate (jobs/[id]/page.tsx notFound()s a job with no formatted
+  // description, same as jobQuery.ts's listing filter). Without it, stub
+  // jobs (fetched but not yet formatted) would enter the sitemap and 404
+  // when a crawler visits them — a documented cause of soft-404 penalties.
+  const VISIBLE_JOB = { isActive: true, formattedDescription: { not: null } } as const;
   const [jobs, contests, activeJobsForCounts] = await Promise.all([
-    prisma.job.findMany({ where: { isActive: true }, select: { id: true, lastScrapedAt: true } }),
+    prisma.job.findMany({ where: VISIBLE_JOB, select: { id: true, lastScrapedAt: true } }),
     SHOW_UNRELEASED_NAV
       ? prisma.contest.findMany({ where: { isActive: true }, select: { id: true, lastScrapedAt: true } })
       : Promise.resolve([]),
-    prisma.job.findMany({ where: { isActive: true }, select: { tags: true, location: true } }),
+    prisma.job.findMany({ where: VISIBLE_JOB, select: { tags: true, location: true } }),
   ]);
 
   // One in-memory pass over every active job rather than 58 x 12 separate

@@ -4,11 +4,14 @@ version = "0.1.0"
 description = "Scraping microservice for the Job Portal project"
 requires-python = ">=3.12,<4.0"
 dependencies = [
-    "scrapegraphai>=1.35.0",
+    # scrapegraphai + playwright removed with the last browser-driven
+    # scraper (YCombinator) — the plan's §9 endgame. langchain-* stay: the
+    # text-completion path (scrapers/llm_fallback.py::run_text_completion,
+    # used by job/description formatting) still uses langchain's init_chat_model.
+    "langchain>=0.3.0",
     "langchain-anthropic>=0.3.0",
     "langchain-google-genai>=2.0.0",
     "langchain-openai>=0.2.0",
-    "playwright>=1.45.0",
     "httpx>=0.27.0",
     "beautifulsoup4>=4.12.0",
     "psycopg[binary]>=3.2.0",
@@ -26,4 +29,4 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["scrapers*", "db*", "utils*", "scripts*"]
+include = ["scrapers*", "db*", "utils*", "scripts*", "feeds*"]
