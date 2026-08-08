@@ -16,7 +16,7 @@ type DashboardData = { jobs: JobStats; analytics: Analytics; contests: number; s
 
 const SOURCE_LABELS: Record<string, string> = {
   greenhouse: "Greenhouse", lever: "Lever", ashby: "Ashby", smartrecruiters: "SmartRecruiters",
-  workable: "Workable", recruitee: "Recruitee", adzuna: "Adzuna", jooble: "Jooble",
+  workable: "Workable", recruitee: "Recruitee", workday: "Workday", adzuna: "Adzuna", jooble: "Jooble",
   careerjet: "Careerjet", himalayas: "Himalayas", dev_community: "DEV Community",
 };
 const formatCompact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });

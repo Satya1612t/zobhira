@@ -30,6 +30,7 @@ from feeds.providers.lever import LeverFeedScraper
 from feeds.providers.recruitee import RecruiteeFeedScraper
 from feeds.providers.smartrecruiters import SmartRecruitersFeedScraper
 from feeds.providers.workable import WorkableFeedScraper
+from feeds.providers.workday import WorkdayFeedScraper
 from utils.field_enrichment import enrich_posting
 from utils.job_formatter import format_job_description
 from utils.logo_lookup import find_logo_url
@@ -47,6 +48,7 @@ PROVIDERS: dict[str, type[FeedScraper]] = {
     "adzuna": AdzunaFeedScraper,
     "jooble": JoobleFeedScraper,
     "careerjet": CareerjetFeedScraper,
+    "workday": WorkdayFeedScraper,
 }
 
 # Deliberately NOT reusing run_scrape.py::is_india_or_remote here — live-

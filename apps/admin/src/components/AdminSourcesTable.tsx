@@ -25,6 +25,7 @@ const SOURCE_META: Record<string, { label: string; category: Category }> = {
   smartrecruiters: { label: "SmartRecruiters", category: "ATS feed" },
   workable: { label: "Workable", category: "ATS feed" },
   recruitee: { label: "Recruitee", category: "ATS feed" },
+  workday: { label: "Workday", category: "ATS feed" },
   adzuna: { label: "Adzuna", category: "Aggregator" },
   jooble: { label: "Jooble", category: "Aggregator" },
   careerjet: { label: "Careerjet", category: "Aggregator" },
