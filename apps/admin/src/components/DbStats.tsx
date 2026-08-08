@@ -10,6 +10,7 @@ const SOURCE_LABELS: Record<string, string> = {
   smartrecruiters: "SmartRecruiters",
   workable: "Workable",
   recruitee: "Recruitee",
+  workday: "Workday",
   adzuna: "Adzuna",
   jooble: "Jooble",
   careerjet: "Careerjet",

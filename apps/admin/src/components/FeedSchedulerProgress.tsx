@@ -40,6 +40,7 @@ const SOURCES = [
   { key: "smartrecruiters", label: "SmartRecruiters", cadence: "Daily" },
   { key: "workable", label: "Workable", cadence: "Daily" },
   { key: "recruitee", label: "Recruitee", cadence: "Daily" },
+  { key: "workday", label: "Workday", cadence: "Daily" },
   { key: "adzuna", label: "Adzuna", cadence: "Daily (aggregator)" },
   { key: "jooble", label: "Jooble", cadence: "Daily (aggregator)" },
   { key: "careerjet", label: "Careerjet", cadence: "Daily (aggregator)" },

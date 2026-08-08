@@ -26,6 +26,7 @@ const SOURCES: { value: string; label: string }[] = [
   { value: "smartrecruiters", label: "SmartRecruiters" },
   { value: "workable", label: "Workable" },
   { value: "recruitee", label: "Recruitee" },
+  { value: "workday", label: "Workday" },
   { value: "adzuna", label: "Adzuna" },
   { value: "jooble", label: "Jooble" },
   { value: "careerjet", label: "Careerjet" },
