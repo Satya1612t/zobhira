@@ -21,7 +21,23 @@ from db.repository import connect
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-DEFAULT_CSV_PATH = Path(__file__).resolve().parents[3] / "db" / "seeds" / "company_registry.csv"
+def _default_csv_path() -> Path:
+    """Find db/seeds/company_registry.csv regardless of layout — it lives at
+    different depths in local dev (services/scraper/scripts/… → repo root is
+    parents[3]) vs. the Docker image (/app/scripts/… → db/ is at /app, i.e.
+    parents[1]). Walk up from this file until we find it rather than
+    hardcoding a depth (the old parents[3] IndexError'd inside the
+    container)."""
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        candidate = parent / "db" / "seeds" / "company_registry.csv"
+        if candidate.exists():
+            return candidate
+    # Last-resort default (may not exist) — the CLI --file arg can override.
+    return here.parent / "db" / "seeds" / "company_registry.csv"
+
+
+DEFAULT_CSV_PATH = _default_csv_path()
 
 _UPSERT_SQL = """
 INSERT INTO company_registry (name, slug, ats_provider, ats_token, careers_url, country_hint, tier)
