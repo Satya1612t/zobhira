@@ -52,6 +52,15 @@ function SourcesIcon() {
     </svg>
   );
 }
+function CompaniesIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 21h18" />
+      <path d="M5 21V7l7-4 7 4v14" />
+      <path d="M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01" />
+    </svg>
+  );
+}
 function ProgressIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -77,10 +86,11 @@ function AnalyticsIcon() {
 }
 
 const TABS = [
-  { label: "Dashboard", href: "/dashboard", Icon: DashboardIcon, comingSoon: true },
+  { label: "Dashboard", href: "/dashboard", Icon: DashboardIcon },
   { label: "Jobs", href: "/jobs", Icon: JobsIcon },
   { label: "Contests", href: "/contests", Icon: ContestsIcon },
   { label: "Scheduler", href: "/scheduler", Icon: SchedulerIcon },
+  { label: "Companies", href: "/companies", Icon: CompaniesIcon },
   { label: "Sources", href: "/sources", Icon: SourcesIcon },
   { label: "Analytics", href: "/analytics", Icon: AnalyticsIcon },
   { label: "Audit Log", href: "/audit-log", Icon: AuditLogIcon },
@@ -102,8 +112,8 @@ export function AdminSidebar() {
           top: 14,
           left: 14,
           zIndex: 20,
-          width: 36,
-          height: 36,
+          width: 44,
+          height: 44,
           borderRadius: "var(--radius-sm)",
           border: "1px solid var(--line)",
           background: "var(--surface)",
@@ -113,13 +123,14 @@ export function AdminSidebar() {
           fontSize: 15,
         }}
       >
-        ☰
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
       </button>
       <div
         className={`sidebar-backdrop${open ? " sidebar-open" : ""}`}
         onClick={() => setOpen(false)}
+        aria-hidden="true"
       />
-      <aside className={`sidebar${open ? " sidebar-open" : ""}`}>
+      <aside className={`sidebar${open ? " sidebar-open" : ""}`} aria-label="Admin navigation">
         <Link
           href="/"
           onClick={() => setOpen(false)}
@@ -139,7 +150,7 @@ export function AdminSidebar() {
             color: "var(--ink-faint)",
           }}
         >
-          Admin
+          Workspace
         </p>
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -155,6 +166,7 @@ export function AdminSidebar() {
                   alignItems: "center",
                   gap: 10,
                   padding: "8px 10px",
+                  minHeight: 42,
                   borderRadius: "var(--radius-sm)",
                   textDecoration: "none",
                   fontSize: 13.5,

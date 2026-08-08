@@ -55,6 +55,14 @@ model Job {
   enrichedAt       DateTime? @map("enriched_at")
   enrichmentHash   String?   @map("enrichment_hash")
 
+  // v2 feed layer (services/scraper/feeds), additive-only — see
+  // db/migrations/0022-0024. Mirrors apps/web's schema. All nullable: v1
+  // rows never set these.
+  applyUrl         String?   @map("apply_url")
+  externalId       String?   @map("external_id")
+  companyId        BigInt?   @map("company_id")
+  companyRegistry  CompanyRegistry? @relation(fields: [companyId], references: [id])
+
   @@index([source])
   @@index([location])
   @@index([postedAt])
@@ -63,6 +71,33 @@ model Job {
   @@index([experienceBand])
   @@index([tagsNorm], type: Gin)
   @@map("jobs")
+}
+
+// v2 feed layer (services/scraper/feeds) — mirrors apps/web's schema. See
+// db/migrations/0022_company_registry.sql. Read-only from the admin UI for
+// now (enable/disable toggling reuses the existing scraper_sources table,
+// per-provider, not per-company).
+model CompanyRegistry {
+  id           BigInt   @id @default(autoincrement())
+  name         String
+  slug         String   @unique
+  atsProvider  String   @map("ats_provider")
+  atsToken     String   @map("ats_token")
+  careersUrl   String?  @map("careers_url")
+  countryHint  String   @default("IN") @map("country_hint")
+  tier         Int      @default(2) @db.SmallInt
+  isActive     Boolean  @default(true) @map("is_active")
+  lastOkAt     DateTime? @map("last_ok_at")
+  lastError    String?  @map("last_error")
+  failStreak   Int      @default(0) @map("fail_streak")
+  etag         String?
+  lastModified String?  @map("last_modified")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  jobs Job[]
+
+  @@unique([atsProvider, atsToken])
+  @@map("company_registry")
 }
 
 model Contest {

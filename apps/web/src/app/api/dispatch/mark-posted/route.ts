@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireDispatchKey } from "@/lib/dispatchAuth";
 
-const VALID_PLATFORMS = ["telegram", "whatsapp", "instagram", "youtube"];
+const VALID_PLATFORMS = ["telegram", "whatsapp", "instagram", "youtube", "linkedin"];
 const VALID_TYPES = ["job", "contest"];
 
 export async function POST(request: NextRequest) {

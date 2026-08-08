@@ -15,24 +15,15 @@ export function AdminChrome({ children }: { children: ReactNode }) {
   return (
     <AuthGate>
       <div className="app-shell">
+        <a className="skip-link" href="#admin-main">Skip to main content</a>
         <AdminSidebar />
         <div className="main-content">
-          <div
-            className="admin-topbar"
-            style={{
-              flexShrink: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "flex-end",
-              padding: "12px 24px",
-              borderBottom: "1px solid var(--line)",
-              background: "var(--surface)",
-            }}
-          >
+          <div className="admin-topbar">
+            <div className="admin-topbar__context"><span>Admin console</span><strong>{pageTitle(pathname)}</strong></div>
             <SignedInAs />
           </div>
           <div className="main-scroll-area">
-            <main style={{ maxWidth: 1040, margin: "0 auto", padding: "24px 24px 40px" }}>
+            <main className="admin-main" id="admin-main" tabIndex={-1}>
               {children}
             </main>
           </div>
@@ -42,26 +33,23 @@ export function AdminChrome({ children }: { children: ReactNode }) {
   );
 }
 
+function pageTitle(pathname: string) {
+  const segment = pathname.split("/").filter(Boolean)[0] ?? "dashboard";
+  return segment.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function SignedInAs() {
   const { user, signOutUser } = useAuth();
   const router = useRouter();
   if (!user) return null;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      <span style={{ fontSize: 12.5, color: "var(--ink-muted)" }}>{user.email}</span>
+    <div className="signed-in">
+      <span className="signed-in__avatar" aria-hidden="true">{user.email?.charAt(0).toUpperCase() ?? "A"}</span>
+      <span className="signed-in__email">{user.email}</span>
       <button
         type="button"
         onClick={() => signOutUser().then(() => router.replace("/login"))}
-        style={{
-          fontSize: 12.5,
-          fontWeight: 600,
-          color: "var(--ink-muted)",
-          background: "transparent",
-          border: "1px solid var(--line)",
-          borderRadius: "var(--radius-sm)",
-          padding: "5px 10px",
-          cursor: "pointer",
-        }}
+        className="sign-out-button"
       >
         Sign out
       </button>

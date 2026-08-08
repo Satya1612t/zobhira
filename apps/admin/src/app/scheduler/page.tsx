@@ -1,6 +1,7 @@
 import { DbStats } from "@/components/DbStats";
 import { SchedulerProgress } from "@/components/SchedulerProgress";
 import { ContestSchedulerProgress } from "@/components/ContestSchedulerProgress";
+import { FeedSchedulerProgress } from "@/components/FeedSchedulerProgress";
 import { SkillMinerProgress } from "@/components/SkillMinerProgress";
 
 export default function SchedulerPage() {
@@ -25,6 +26,19 @@ export default function SchedulerPage() {
         Contests
       </h2>
       <ContestSchedulerProgress />
+
+      <h2
+        style={{
+          fontFamily: "var(--font-display)",
+          fontSize: 18,
+          fontWeight: 600,
+          margin: "28px 0 12px",
+          color: "var(--ink)",
+        }}
+      >
+        Feeds (ATS boards)
+      </h2>
+      <FeedSchedulerProgress />
 
       <h2
         style={{

@@ -1,17 +1,14 @@
 import logging
 import threading
-from contextlib import nullcontext
 from datetime import datetime, time, timedelta, timezone
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
 from dotenv import load_dotenv
 
 from db.repository import (
     connect,
     get_enabled_sources,
-    get_recent_searches,
     prune_analytics,
     reap_expired,
     reap_stale,
@@ -20,14 +17,13 @@ from db.repository import (
 from scrapers.base import RateLimitedError
 from scripts.run_scrape import run_source
 from taxonomy import STREAM_QUERIES
-from utils.browser import get_browser
 
-# Sources whose scraper launches its own Playwright browser (see
-# scrapers/{linkedin,ycombinator,talentd}.py) — each of these is swept with
-# up to 15 queries per run, so hoisting one browser for the whole loop below
-# (instead of one launch per query, per list/enrich phase — up to 30 cold
-# Chromium starts per LinkedIn sweep before this) is worth the plumbing.
-PLAYWRIGHT_SOURCES = {"linkedin", "ycombinator", "talentd"}
+# Playwright is gone entirely (the plan's §9 endgame): LinkedIn, Talentd and
+# YCombinator — the only browser-driven scrapers — were all retired once the
+# v2 feed layer + aggregators covered their role with cleaner direct-apply
+# data. The single remaining v1 source, Himalayas, is a plain JSON API (no
+# browser), so nothing here launches Chromium anymore and playwright/
+# scrapegraphai were dropped from pyproject.toml + the Dockerfile.
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -63,11 +59,7 @@ LOCATION = "India"
 # 100 (comfortably above either site's typical per-query result count, so
 # it acts as "enrich everything found" rather than a real cap).
 DETAIL_LIMIT = 25
-DETAIL_LIMIT_BY_SOURCE: dict[str, int] = {
-    "linkedin": 25,
-    "ycombinator": 100,
-    "talentd": 100,
-}
+DETAIL_LIMIT_BY_SOURCE: dict[str, int] = {}
 
 # Sources are tiered by real-world posting volume (see chat discussion citing
 # LinkedIn as the high-volume platform vs. Talentd/YC as low-volume niche
@@ -85,34 +77,16 @@ RUN_AT = time(hour=2, minute=0)
 MAX_AGE_HOURS = 15 * 24
 
 TIER_SOURCES: dict[str, list[str]] = {
-    "daily": ["linkedin", "himalayas"],
-    "every_2_days": ["talentd"],
-    "every_3_days": ["ycombinator"],
+    "daily": ["himalayas"],
 }
 
-# Supplementary LinkedIn sweep over whatever users have actually searched
-# for on the site (search_queries table, same one apps/web's StreamsPanel
-# reads from) instead of the fixed STREAM_QUERIES list — same scraping
-# caveats as the regular daily sweep (real server-side search, 24h f_TPR
-# filter, DETAIL_LIMIT enrichment cap, mandatory-field rule, all via the
-# same run_source() call). Chained 1 hour after the daily LinkedIn sweep
-# finishes (see scrape_daily) rather than its own fixed cron slot, so it
-# never overlaps that run; only fires 3x/week since it's a supplementary
-# pass on top of the main sweep, not a replacement for it.
-RECENT_SEARCHES_LIMIT = 12
-RECENT_SEARCHES_WEEKDAYS = {0, 2, 4}  # Monday, Wednesday, Friday (datetime.weekday())
-RECENT_SEARCHES_DELAY_SECONDS = 60 * 60  # 1 hour
-
-# Sources whose deterministic scraper has no real server-side search — each
-# just loads one fixed listing page/API response and filters by substring
-# match against the title client-side (confirmed by reading scrape_list() in
-# scrapers/ycombinator.py, scrapers/talentd.py). Looping many queries
-# against these just re-fetches and re-filters the same fixed page/response
-# over and over, missing anything whose title doesn't contain any query
-# term — so they get a single query-less pass instead. LinkedIn builds a
-# real `q=<query>` server-side search URL, where query breadth actually
-# changes what comes back, so it keeps the STREAM_QUERIES loop.
-NO_SEARCH_SOURCES: set[str] = {"ycombinator", "talentd"}
+# Sources whose deterministic scraper has no real server-side search — it
+# Sources with no real server-side search (they load one fixed listing and
+# filter titles client-side) get a single query-less pass instead of the
+# STREAM_QUERIES loop. Empty now: YCombinator (the last such source) was
+# retired, and the only remaining v1 source, Himalayas, does build a real
+# per-query search, so it keeps the STREAM_QUERIES loop.
+NO_SEARCH_SOURCES: set[str] = set()
 SOURCE_TIER: dict[str, str] = {
     source: tier for tier, sources in TIER_SOURCES.items() for source in sources
 }
@@ -127,7 +101,6 @@ ALL_SOURCES: list[str] = list(SOURCE_TIER)
 _lock = threading.Lock()
 _current: dict | None = None  # progress for whichever single source is running right now
 _last_runs: dict[str, dict | None] = {source: None for source in ALL_SOURCES}
-_last_runs["linkedin_recent_searches"] = None
 
 
 def get_progress() -> dict:
@@ -210,66 +183,62 @@ def _sweep(sources: list[str]) -> None:
                 "current_query": None,
             }
             errors = 0
-            # One browser for this source's whole multi-query loop (only for
-            # sources that actually use Playwright — see PLAYWRIGHT_SOURCES)
-            # instead of a fresh launch per query, per list/enrich phase.
-            browser_ctx = get_browser() if source in PLAYWRIGHT_SOURCES else nullcontext(None)
             # Cross-query overlap tracking (see run_source's seen_dedup_keys
-            # docstring) — only meaningful for the real STREAM_QUERIES loop,
-            # not the single query-less pass NO_SEARCH_SOURCES gets.
-            seen_dedup_keys = set() if source not in NO_SEARCH_SOURCES else None
-            with browser_ctx as sweep_browser:
-                for query in queries:
-                    _current["current_query"] = query or "(all listings, no query filter)"
-                    rate_limited = False
+            # docstring) — Himalayas runs the full STREAM_QUERIES loop, so
+            # this is always meaningful now (NO_SEARCH_SOURCES is empty).
+            seen_dedup_keys = set()
+            # browser=None everywhere now — Playwright is gone (the last
+            # browser-driven source, YCombinator, was retired). Himalayas is
+            # a plain JSON API and ignores the param anyway.
+            for query in queries:
+                _current["current_query"] = query or "(all listings, no query filter)"
+                rate_limited = False
+                try:
+                    count = run_source(
+                        source, query=query, location=LOCATION,
+                        mark_stale=False, detail_limit=DETAIL_LIMIT_BY_SOURCE.get(source, DETAIL_LIMIT),
+                        max_age_hours=MAX_AGE_HOURS, max_results=None,
+                        browser=None, seen_dedup_keys=seen_dedup_keys,
+                    )
+                    logger.info("source=%s query=%r -> %d postings saved", source, query, count)
+                    _current["saved_count"] += count
+                except RateLimitedError as exc:
+                    # A 429 means the source just told us to back off —
+                    # ploughing through the remaining queries in this sweep
+                    # would just keep hammering it, turning a soft rate limit
+                    # into a hard ban. Abort the rest of this source's
+                    # queries for this cycle entirely.
+                    logger.warning(
+                        "source=%s rate limited (429) on query=%r — skipping remaining queries this cycle",
+                        source, query,
+                    )
+                    errors += 1
+                    rate_limited = True
                     try:
-                        count = run_source(
-                            source, query=query, location=LOCATION,
-                            mark_stale=False, detail_limit=DETAIL_LIMIT_BY_SOURCE.get(source, DETAIL_LIMIT),
-                            max_age_hours=MAX_AGE_HOURS, max_results=None,
-                            browser=sweep_browser, seen_dedup_keys=seen_dedup_keys,
-                        )
-                        logger.info("source=%s query=%r -> %d postings saved", source, query, count)
-                        _current["saved_count"] += count
-                    except RateLimitedError as exc:
-                        # A 429 means the source just told us to back off —
-                        # ploughing through the remaining queries in this
-                        # sweep would just keep hammering it, turning a soft
-                        # rate limit into a hard ban. Abort the rest of this
-                        # source's queries for this cycle entirely, rather
-                        # than treating it like any other per-query failure
-                        # that just moves on to the next query.
-                        logger.warning(
-                            "source=%s rate limited (429) on query=%r — skipping remaining queries this cycle",
-                            source, query,
-                        )
-                        errors += 1
-                        rate_limited = True
+                        error_conn = connect()
                         try:
-                            error_conn = connect()
-                            try:
-                                record_source_error(error_conn, source, str(exc))
-                            finally:
-                                error_conn.close()
-                        except Exception:
-                            logger.warning("Could not record last_error for source=%s", source)
-                    except Exception as exc:
-                        logger.exception(
-                            "Scheduled scrape failed for source=%s query=%r", source, query
-                        )
-                        errors += 1
+                            record_source_error(error_conn, source, str(exc))
+                        finally:
+                            error_conn.close()
+                    except Exception:
+                        logger.warning("Could not record last_error for source=%s", source)
+                except Exception as exc:
+                    logger.exception(
+                        "Scheduled scrape failed for source=%s query=%r", source, query
+                    )
+                    errors += 1
+                    try:
+                        error_conn = connect()
                         try:
-                            error_conn = connect()
-                            try:
-                                record_source_error(error_conn, source, str(exc))
-                            finally:
-                                error_conn.close()
-                        except Exception:
-                            logger.warning("Could not record last_error for source=%s", source)
-                    finally:
-                        _current["completed_steps"] += 1
-                    if rate_limited:
-                        break
+                            record_source_error(error_conn, source, str(exc))
+                        finally:
+                            error_conn.close()
+                    except Exception:
+                        logger.warning("Could not record last_error for source=%s", source)
+                finally:
+                    _current["completed_steps"] += 1
+                if rate_limited:
+                    break
             finished_at = datetime.now(timezone.utc)
             _last_runs[source] = {
                 "started_at": started_at.isoformat(), "finished_at": finished_at.isoformat(),
@@ -280,102 +249,11 @@ def _sweep(sources: list[str]) -> None:
         _lock.release()
 
 
-def scrape_recent_searches_linkedin() -> None:
-    """LinkedIn only, queried against recent real user searches instead of
-    STREAM_QUERIES — same run_source() call, same caveats (real server-side
-    search, 48h f_TPR filter + India geoId, DETAIL_LIMIT=25 enrichment cap,
-    mandatory 4-field rule, dedup) as the regular daily sweep. Shares the
-    same _lock as every other sweep, so if something is still running when
-    the 1-hour delay (see _maybe_chain_recent_searches_sweep) elapses, this
-    just skips rather than stacking."""
-    global _current
-    if not _lock.acquire(blocking=False):
-        logger.warning("Recent-searches LinkedIn sweep skipped: another sweep is already running")
-        return
-
-    try:
-        conn = connect()
-        try:
-            queries = get_recent_searches(conn, limit=RECENT_SEARCHES_LIMIT)
-        finally:
-            conn.close()
-        if not queries:
-            logger.info("No recent searches recorded yet — skipping recent-searches LinkedIn sweep")
-            return
-
-        source = "linkedin"
-        started_at = datetime.now(timezone.utc)
-        total_steps = len(queries)
-        _current = {
-            "source": source, "tier": "recent_searches", "started_at": started_at.isoformat(),
-            "total_steps": total_steps, "completed_steps": 0, "saved_count": 0,
-            "current_query": None,
-        }
-        errors = 0
-        # LinkedIn always uses Playwright — one shared browser for this
-        # whole 12-query loop instead of one launch per query.
-        with get_browser() as sweep_browser:
-            for query in queries:
-                _current["current_query"] = query
-                try:
-                    count = run_source(
-                        source, query=query, location=LOCATION,
-                        mark_stale=False, detail_limit=DETAIL_LIMIT_BY_SOURCE.get(source, DETAIL_LIMIT),
-                        max_age_hours=MAX_AGE_HOURS, max_results=None,
-                        browser=sweep_browser,
-                    )
-                    logger.info("recent-search query=%r -> %d postings saved", query, count)
-                    _current["saved_count"] += count
-                except Exception:
-                    logger.exception("Recent-searches LinkedIn scrape failed for query=%r", query)
-                    errors += 1
-                finally:
-                    _current["completed_steps"] += 1
-        finished_at = datetime.now(timezone.utc)
-        _last_runs["linkedin_recent_searches"] = {
-            "started_at": started_at.isoformat(), "finished_at": finished_at.isoformat(),
-            "total_steps": total_steps, "saved_count": _current["saved_count"], "errors": errors,
-        }
-    finally:
-        _current = None
-        _lock.release()
-
-
-def _maybe_chain_recent_searches_sweep() -> None:
-    """Called right after the daily LinkedIn sweep finishes. Only actually
-    schedules anything on the 3 target weekdays — the delayed call itself
-    (not a fixed cron slot) is what guarantees this never overlaps that
-    sweep, satisfying "1 hour after the linkedin run finishes" literally
-    rather than approximating it with a fixed clock time."""
-    if datetime.now().weekday() not in RECENT_SEARCHES_WEEKDAYS:
-        return
-    logger.info(
-        "Scheduling LinkedIn recent-searches sweep in %d minutes",
-        RECENT_SEARCHES_DELAY_SECONDS // 60,
-    )
-    timer = threading.Timer(RECENT_SEARCHES_DELAY_SECONDS, scrape_recent_searches_linkedin)
-    timer.daemon = True
-    timer.start()
-
-
 def scrape_daily() -> None:
-    """High-volume source: LinkedIn — every 24h at 02:00. Chains the
-    recent-searches sweep 1 hour after this finishes, 3x/week (see
-    _maybe_chain_recent_searches_sweep)."""
+    """Daily 02:00 sweep. Himalayas only now — LinkedIn, Talentd and
+    YCombinator were all retired (the plan's §9), and with them the
+    recent-searches chain and the every-3-days YC tier."""
     _sweep(TIER_SOURCES["daily"])
-    _maybe_chain_recent_searches_sweep()
-
-
-def scrape_every_2_days() -> None:
-    """Talentd — every 2 days at 02:00. In NO_SEARCH_SOURCES: a single
-    query-less pass, not the 15-query loop."""
-    _sweep(TIER_SOURCES["every_2_days"])
-
-
-def scrape_every_3_days() -> None:
-    """Lowest-volume source: YCombinator — every 3 days at 02:00. Single
-    query-less pass (see _sweep), not the 15-query loop other tiers use."""
-    _sweep(TIER_SOURCES["every_3_days"])
 
 
 def _next_run_at(hour: int, minute: int) -> datetime:
@@ -435,23 +313,12 @@ def main() -> None:
         scrape_daily, CronTrigger(hour=RUN_AT.hour, minute=RUN_AT.minute),
         max_instances=1, coalesce=True,
     )
-    scheduler.add_job(
-        scrape_every_2_days,
-        IntervalTrigger(days=2, start_date=_next_run_at(RUN_AT.hour, RUN_AT.minute)),
-        max_instances=1, coalesce=True,
-    )
-    scheduler.add_job(
-        scrape_every_3_days,
-        IntervalTrigger(days=3, start_date=_next_run_at(RUN_AT.hour, RUN_AT.minute)),
-        max_instances=1, coalesce=True,
-    )
     scheduler.add_job(reap_stale_jobs, "interval", hours=REAP_EVERY_HOURS, next_run_time=None)
     scheduler.add_job(reap_expired_jobs, "interval", hours=REAP_EVERY_HOURS, next_run_time=None)
     scheduler.add_job(prune_analytics_job, "interval", hours=24, next_run_time=None)
 
     logger.info(
-        "Scheduler started: linkedin daily, talentd every 2 days, "
-        "ycombinator every 3 days, all at %02d:%02d local; %d streams/source; "
+        "Scheduler started: himalayas daily at %02d:%02d local; %d streams; "
         "reap_stale/reap_expired every %d hours",
         RUN_AT.hour, RUN_AT.minute, len(STREAM_QUERIES), REAP_EVERY_HOURS,
     )

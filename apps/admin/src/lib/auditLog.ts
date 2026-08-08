@@ -10,9 +10,13 @@ type AuditAction =
   | "contest.clear_all"
   | "source.set_enabled"
   | "scheduler.trigger"
-  | "contest_scheduler.trigger";
+  | "contest_scheduler.trigger"
+  | "feed_scheduler.trigger"
+  | "company.add"
+  | "company.set_active"
+  | "company.delete";
 
-type AuditTargetType = "job" | "contest" | "source" | "scheduler";
+type AuditTargetType = "job" | "contest" | "source" | "scheduler" | "company";
 
 // Fire-and-forget by design: a logging failure must never block or fail the
 // admin action it's recording. Errors are swallowed (not silently ignored —

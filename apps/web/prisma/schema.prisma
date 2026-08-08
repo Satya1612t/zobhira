@@ -69,6 +69,17 @@ model Job {
   // NULL means never checked. See db/migrations/0015_add_job_link_checked_at.sql.
   linkCheckedAt    DateTime? @map("link_checked_at")
 
+  // v2 feed layer (services/scraper/feeds), additive-only — see
+  // db/migrations/0022-0024. All nullable: v1 rows never set these. For
+  // feed sources the board page (sourceUrl) and the application form
+  // (applyUrl) are different URLs; applyUrl is the one that matters to a
+  // candidate. externalId is the ATS's own posting id, scoped per source
+  // (unique together, see idx_jobs_source_external).
+  applyUrl         String?   @map("apply_url")
+  externalId       String?   @map("external_id")
+  companyId        BigInt?   @map("company_id")
+  companyRegistry  CompanyRegistry? @relation(fields: [companyId], references: [id])
+
   // Derived at ingest (services/scraper/utils/field_enrichment.py), read-only
   // from the app's side. See db/migrations/0019.
   minYearsExp      Decimal?  @map("min_years_exp")
@@ -96,6 +107,34 @@ model Job {
   @@index([experienceBand])
   @@index([tagsNorm], type: Gin)
   @@map("jobs")
+}
+
+// v2 feed layer (services/scraper/feeds) — maps a company to its hiring-
+// software board (Greenhouse/Lever/Ashby/...) so the feed connectors know
+// which public JSON endpoint to poll. See db/migrations/0022_company_registry.sql.
+// Written only by services/scraper (seed_registry.py / detect_ats.py); read
+// here for admin UI and for the Job.companyRegistry relation.
+model CompanyRegistry {
+  id           BigInt   @id @default(autoincrement())
+  name         String
+  slug         String   @unique
+  atsProvider  String   @map("ats_provider")
+  atsToken     String   @map("ats_token")
+  careersUrl   String?  @map("careers_url")
+  countryHint  String   @default("IN") @map("country_hint")
+  tier         Int      @default(2) @db.SmallInt
+  isActive     Boolean  @default(true) @map("is_active")
+  lastOkAt     DateTime? @map("last_ok_at")
+  lastError    String?  @map("last_error")
+  failStreak   Int      @default(0) @map("fail_streak")
+  etag         String?
+  lastModified String?  @map("last_modified")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  jobs Job[]
+
+  @@unique([atsProvider, atsToken])
+  @@map("company_registry")
 }
 
 // Contest/hackathon listings sourced from public RSS/JSON feeds (Devpost's

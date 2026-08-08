@@ -34,23 +34,14 @@ const POLL_INTERVAL_MS = 3000;
 // same rule that's always applied to scraping in this app. `cadence` is
 // just display context for which scheduled tier this source belongs to.
 //
-// The recent-searches LinkedIn sweep shares the same backend `source`
-// string ("linkedin") as the regular daily sweep — `current.tier` is what
-// actually distinguishes them ("daily" vs "recent_searches"), so
-// `sourceKey`/`matchTier` let this card match on both instead of just
-// `source` alone.
+// LinkedIn, Talentd and YCombinator were all retired (the plan's §9) — the
+// v2 feed layer + aggregators cover their role with cleaner direct-apply
+// data, and retiring the last Playwright scraper (YC) let Playwright be
+// dropped entirely. Himalayas (a plain JSON API) is the only v1 scraper
+// left. `matchTier` is kept on the type for the general mechanism even
+// though nothing currently uses it.
 const SOURCES: { key: string; label: string; cadence: string; sourceKey: string; matchTier?: string }[] = [
-  { key: "linkedin", label: "LinkedIn", cadence: "Daily", sourceKey: "linkedin" },
   { key: "himalayas", label: "Himalayas", cadence: "Daily", sourceKey: "himalayas" },
-  { key: "talentd", label: "Talentd", cadence: "Every 2 Days", sourceKey: "talentd" },
-  { key: "ycombinator", label: "YCombinator", cadence: "Every 3 Days", sourceKey: "ycombinator" },
-  {
-    key: "linkedin_recent_searches",
-    label: "LinkedIn (Recent Searches)",
-    cadence: "3x/Week, 1h after daily",
-    sourceKey: "linkedin",
-    matchTier: "recent_searches",
-  },
 ];
 
 function formatDateTime(iso: string): string {

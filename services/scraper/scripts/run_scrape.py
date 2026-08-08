@@ -11,9 +11,6 @@ from utils.field_enrichment import enrich_posting
 from utils.job_formatter import BREAKER_THRESHOLD, format_job_description, format_posting_with_breaker
 from scrapers.base import BaseJobScraper
 from scrapers.himalayas import HimalayasScraper
-from scrapers.linkedin import LinkedInScraper
-from scrapers.talentd import TalentdScraper
-from scrapers.ycombinator import YCombinatorScraper
 from utils.logo_lookup import find_logo_url
 
 # Small, per-source, per-run batch of previously-saved jobs still missing
@@ -141,10 +138,14 @@ def flag_staffing_agency(posting) -> None:
     if any(kw in lowered for kw in _STAFFING_KEYWORDS):
         posting.raw["flagged_staffing_agency"] = True
 
+# LinkedIn, Talentd and YCombinator all retired (the plan's §9) — the v2 feed
+# layer + aggregators cover their role with cleaner direct-apply data, and
+# retiring the last Playwright scraper (YC) let Playwright/scrapegraphai be
+# dropped entirely. Himalayas (a plain JSON API) is the only v1 scraper left.
+# The source-specific helpers above (passes_content_quality /
+# flag_staffing_agency / is_india_or_remote's talentd branch) are left in
+# place as harmless dead branches — still imported by api.py.
 SCRAPERS: dict[str, type[BaseJobScraper]] = {
-    "ycombinator": YCombinatorScraper,
-    "talentd": TalentdScraper,
-    "linkedin": LinkedInScraper,
     "himalayas": HimalayasScraper,
 }
 

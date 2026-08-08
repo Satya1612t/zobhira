@@ -45,6 +45,14 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # v2 feed layer (services/scraper/feeds). Aggregator keys are optional —
+      # a connector self-skips if its key is unset, so leaving these blank
+      # just disables that aggregator (Adzuna/Jooble/Careerjet). FEED_* have
+      # sensible defaults (see feed_scheduler.py); override only to tune.
+      ADZUNA_APP_ID: ${ADZUNA_APP_ID}
+      ADZUNA_APP_KEY: ${ADZUNA_APP_KEY}
+      JOOBLE_API_KEY: ${JOOBLE_API_KEY}
+      CAREERJET_AFFID: ${CAREERJET_AFFID}
     healthcheck:
       test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/scheduler/progress').raise_for_status()"]
       interval: 30s

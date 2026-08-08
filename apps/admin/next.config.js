@@ -25,6 +25,14 @@ const SECURITY_HEADERS = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  // Firebase Google sign-in opens a popup to accounts.google.com, which
+  // serves a strict COOP. Without matching `same-origin-allow-popups` here,
+  // the browser severs the opener↔popup link ("Cross-Origin-Opener-Policy
+  // policy would block the window.closed call"), so signInWithPopup can't
+  // hand the signed-in user back — currentUser stays null and the ID token
+  // comes back undefined. `same-origin-allow-popups` keeps our own isolation
+  // while still letting popups we open talk back to us.
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
   // Only takes effect over HTTPS (prod, behind nginx/Let's Encrypt) — browsers
   // ignore it on plain http, so it's harmless in local dev.
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
