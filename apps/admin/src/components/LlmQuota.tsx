@@ -120,13 +120,20 @@ export function LlmQuota() {
       <div style={{ ...card, color: "var(--ink-muted)", fontSize: 13.5, lineHeight: 1.6 }}>
         <strong style={{ color: "var(--ink)" }}>FreeLLMAPI admin not configured.</strong>
         <p style={{ margin: "8px 0 0" }}>
-          Set these in the scraper&apos;s <code>.env</code> (the router&apos;s dashboard login, not the
-          inference API key), then restart the scraper:
+          Set all three in the scraper&apos;s <code>.env</code> — the router&apos;s dashboard login
+          (not the inference API key) plus its base URL — then restart the scraper:
         </p>
         <pre style={{ margin: "8px 0 0", padding: 12, background: "var(--surface-hover)", borderRadius: "var(--radius-sm)", fontSize: 12.5, overflowX: "auto" }}>
-{`FREELLMAPI_ADMIN_EMAIL=you@example.com
+{`FREELLMAPI_BASE_URL=http://localhost:3001/v1
+FREELLMAPI_ADMIN_EMAIL=you@example.com
 FREELLMAPI_ADMIN_PASSWORD=<your freellmapi dashboard password>`}
         </pre>
+        <p style={{ margin: "10px 0 0", fontSize: 12.5 }}>
+          Already set them and still seeing this? Confirm the admin app&apos;s{" "}
+          <code>SCRAPER_API_URL</code> points at the same scraper where you edited the{" "}
+          <code>.env</code> — a locally-run admin talking to a local scraper won&apos;t see vars you
+          set on the server.
+        </p>
       </div>
     );
   }
