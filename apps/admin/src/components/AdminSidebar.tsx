@@ -145,10 +145,11 @@ export function AdminSidebar() {
         <Link
           href="/"
           onClick={() => setOpen(false)}
-          style={{ display: "flex", alignItems: "center", textDecoration: "none", marginBottom: 24 }}
+          style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", marginBottom: 24 }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/zobhira-logo-dark.png" alt="Zobhira" style={{ height: 24, width: "auto" }} />
+          <img src="/brand/logo.png" alt="Zobhira" style={{ height: 28, width: 28, objectFit: "contain", flexShrink: 0 }} />
+          <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 17, color: "var(--ink)" }}>Zobhira</span>
         </Link>
 
         <p

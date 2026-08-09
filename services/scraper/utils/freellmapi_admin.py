@@ -53,6 +53,34 @@ def _get(client: httpx.Client, base: str, path: str, token: str) -> object:
     return resp.json()
 
 
+def _sum_daily_limits(models: object) -> dict:
+    """Sum the per-model daily caps (rpdLimit / tpdLimit) across every usable
+    model into an approximate combined daily allowance. The free tiers reset
+    daily, so 'used today vs this total' is a meaningful, self-renewing gauge.
+    Models with no key (keyCount 0), disabled, or with an unlimited/blank cap
+    are skipped — an unlimited model can't contribute to a finite total."""
+    items = models.get("models") if isinstance(models, dict) else models
+    if not isinstance(items, list):
+        return {"requests": None, "tokens": None}
+    req_total = 0
+    tok_total = 0
+    for m in items:
+        if not isinstance(m, dict):
+            continue
+        if m.get("enabled") is False or (m.get("keyCount") or 0) < 1:
+            continue
+        rpd = m.get("rpdLimit")
+        tpd = m.get("tpdLimit")
+        if isinstance(rpd, (int, float)) and rpd > 0:
+            req_total += int(rpd)
+        if isinstance(tpd, (int, float)) and tpd > 0:
+            tok_total += int(tpd)
+    return {
+        "requests": req_total or None,
+        "tokens": tok_total or None,
+    }
+
+
 def fetch_llm_status() -> dict:
     """Returns a dict the admin LLM page renders:
       {"configured": bool, "error"?: str, "summary"?: ..., "byPlatform"?: ...,
@@ -76,9 +104,22 @@ def fetch_llm_status() -> dict:
                 return {"configured": True, "error": "Login returned no token."}
 
             def fetch_all(tok: str) -> dict:
+                summary = _get(client, base, "/api/analytics/summary?range=30d", tok)
+                today = _get(client, base, "/api/analytics/summary?range=24h", tok)
+                limits = _sum_daily_limits(_get(client, base, "/api/models", tok))
+                t = today if isinstance(today, dict) else {}
+                tokens_used = (t.get("totalInputTokens") or 0) + (t.get("totalOutputTokens") or 0)
                 return {
                     "configured": True,
-                    "summary": _get(client, base, "/api/analytics/summary?range=30d", tok),
+                    "summary": summary,
+                    # Today's usage vs the combined daily allowance — the "how
+                    # much is left today" gauge (free tiers reset daily).
+                    "daily": {
+                        "requestsUsed": t.get("totalRequests"),
+                        "requestsLimit": limits["requests"],
+                        "tokensUsed": tokens_used,
+                        "tokensLimit": limits["tokens"],
+                    },
                     "byPlatform": _get(client, base, "/api/analytics/by-platform?range=30d", tok),
                     "keys": _get(client, base, "/api/keys", tok),
                 }

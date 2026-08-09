@@ -18,10 +18,17 @@ type Platform = {
   errorCount?: number;
 };
 type Key = { platform?: string; status?: string; enabled?: boolean };
+type Daily = {
+  requestsUsed?: number | null;
+  requestsLimit?: number | null;
+  tokensUsed?: number | null;
+  tokensLimit?: number | null;
+};
 type Quota = {
   configured?: boolean;
   error?: string;
   summary?: Summary;
+  daily?: Daily;
   byPlatform?: Platform[];
   keys?: Key[];
 };
@@ -47,6 +54,44 @@ function health(rate: number | undefined): { color: string; label: string } {
   if (rate >= 90) return { color: "#16a34a", label: "healthy" };
   if (rate >= 75) return { color: "#d97706", label: "flaky" };
   return { color: "#dc2626", label: "failing" };
+}
+
+// One bar: how much of today's combined daily allowance is spent. Free tiers
+// reset daily, so this empties and refills each day.
+function DailyBar({ daily }: { daily: Daily }) {
+  const used = daily.requestsUsed ?? 0;
+  const limit = daily.requestsLimit ?? 0;
+  const hasLimit = limit > 0;
+  const pct = hasLimit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const left = Math.max(0, limit - used);
+  const color = pct >= 90 ? "#dc2626" : pct >= 75 ? "#d97706" : "#16a34a";
+
+  return (
+    <div style={{ ...card, marginBottom: 22 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--ink)" }}>Today&apos;s usage</span>
+        <span style={{ fontSize: 12.5, color: "var(--ink-muted)" }}>
+          {used.toLocaleString()}{hasLimit ? ` / ${limit.toLocaleString()}` : ""} requests
+        </span>
+      </div>
+      {hasLimit ? (
+        <>
+          <div style={{ height: 14, borderRadius: 99, background: "var(--surface-hover)", overflow: "hidden" }}>
+            <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 99, transition: "width .3s ease" }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 12.5 }}>
+            <span style={{ color: "var(--ink-muted)" }}>Used <strong style={{ color: "var(--ink)" }}>{used.toLocaleString()}</strong></span>
+            <span style={{ color: "var(--ink-muted)" }}>Left <strong style={{ color: color }}>{left.toLocaleString()}</strong></span>
+          </div>
+        </>
+      ) : (
+        <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "var(--ink-muted)" }}>
+          {used.toLocaleString()} requests used today. The router doesn&apos;t report a daily limit
+          for the active providers, so there&apos;s no &quot;left&quot; figure to show.
+        </p>
+      )}
+    </div>
+  );
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -119,6 +164,9 @@ FREELLMAPI_ADMIN_PASSWORD=<your freellmapi dashboard password>`}
       {data?.error && (
         <div style={{ ...card, borderColor: "#dc2626", color: "#dc2626", fontSize: 13, marginBottom: 18 }}>{data.error}</div>
       )}
+
+      {/* The one bar: today's usage vs the daily allowance. */}
+      {data?.daily && <DailyBar daily={data.daily} />}
 
       {/* Headline numbers — everything you usually want at a glance. */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 22 }}>
