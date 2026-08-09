@@ -76,6 +76,16 @@ function AuditLogIcon() {
     </svg>
   );
 }
+function LlmIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="8" width="16" height="12" rx="2" />
+      <path d="M12 8V4M9 4h6" />
+      <path d="M8 13v2M16 13v2" />
+      <path d="M2 13h2M20 13h2" />
+    </svg>
+  );
+}
 function AnalyticsIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -92,6 +102,7 @@ const TABS = [
   { label: "Scheduler", href: "/scheduler", Icon: SchedulerIcon },
   { label: "Companies", href: "/companies", Icon: CompaniesIcon },
   { label: "Sources", href: "/sources", Icon: SourcesIcon },
+  { label: "LLM", href: "/llm", Icon: LlmIcon },
   { label: "Analytics", href: "/analytics", Icon: AnalyticsIcon },
   { label: "Audit Log", href: "/audit-log", Icon: AuditLogIcon },
   { label: "Progress", href: "/progress", Icon: ProgressIcon, comingSoon: true },

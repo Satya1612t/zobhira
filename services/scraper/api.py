@@ -133,6 +133,17 @@ def _start_feed_background_scheduler() -> None:
     )
 
 
+@app.get("/llm/quota")
+def get_llm_quota():
+    """FreeLLMAPI router status for the admin LLM page — provider health +
+    usage/analytics, read from the router's own dashboard API (see
+    utils/freellmapi_admin.py). Returns {"configured": False} if the admin
+    creds aren't set, never raises."""
+    from utils.freellmapi_admin import fetch_llm_status
+
+    return fetch_llm_status()
+
+
 @app.get("/feeds/scheduler/progress")
 def get_feed_scheduler_progress():
     return feed_scheduler.get_feed_progress()

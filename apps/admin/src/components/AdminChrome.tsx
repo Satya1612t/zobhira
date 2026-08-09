@@ -35,6 +35,7 @@ export function AdminChrome({ children }: { children: ReactNode }) {
 
 function pageTitle(pathname: string) {
   const segment = pathname.split("/").filter(Boolean)[0] ?? "dashboard";
+  if (segment === "llm") return "LLM";
   return segment.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
