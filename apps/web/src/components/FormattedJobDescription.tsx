@@ -10,9 +10,13 @@ type StructuredDescription = {
   niceToHave: string[];
   benefits: string[];
   details: string[];
+  // Present on short-source listings (e.g. aggregator snippets) pointing the
+  // reader to the apply link for the full JD — see services/scraper's
+  // format_jobs.py. Absent on full descriptions.
+  sourceNote: string | null;
 };
 
-const SECTION_LABELS: Record<keyof Omit<StructuredDescription, "overview">, string> = {
+const SECTION_LABELS: Record<keyof Omit<StructuredDescription, "overview" | "sourceNote">, string> = {
   responsibilities: "Responsibilities",
   requirements: "Requirements",
   niceToHave: "Nice to have",
@@ -53,6 +57,7 @@ function parseStructured(formatted: string): StructuredDescription | null {
     niceToHave: isStrArray(d.niceToHave) ? d.niceToHave : [],
     benefits: isStrArray(d.benefits) ? d.benefits : [],
     details: isStrArray(d.details) ? d.details : [],
+    sourceNote: typeof d.sourceNote === "string" ? d.sourceNote : null,
   };
 }
 
@@ -143,6 +148,19 @@ export function FormattedJobDescription({
               <BulletSection title={SECTION_LABELS.niceToHave} items={structured.niceToHave} />
               <BulletSection title={SECTION_LABELS.benefits} items={structured.benefits} />
               <BulletSection title={SECTION_LABELS.details} items={structured.details} />
+              {structured.sourceNote && (
+                <p style={{
+                  marginTop: 18,
+                  padding: "12px 14px",
+                  borderRadius: "var(--radius)",
+                  border: "1px solid var(--line)",
+                  background: "var(--surface-2, rgba(0,0,0,0.03))",
+                  color: "var(--ink-muted)",
+                  fontSize: 14,
+                }}>
+                  {structured.sourceNote}
+                </p>
+              )}
             </div>
           ) : (
             <p style={{ whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>{linkifyText(formatted ?? description)}</p>

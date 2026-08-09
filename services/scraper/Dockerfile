@@ -7,7 +7,7 @@ COPY feeds ./feeds
 COPY db ./db
 COPY utils ./utils
 COPY scripts ./scripts
-COPY api.py scheduler.py contest_scheduler.py feed_scheduler.py skill_miner_scheduler.py designation_classifier.py taxonomy.py role_aliases.py ./
+COPY api.py scheduler.py contest_scheduler.py feed_scheduler.py skill_miner_scheduler.py format_scheduler.py designation_classifier.py taxonomy.py role_aliases.py ./
 
 RUN pip install --no-cache-dir -e .
 # No `playwright install` anymore — the last browser-driven scraper

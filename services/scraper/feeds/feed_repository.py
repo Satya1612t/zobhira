@@ -72,12 +72,14 @@ ON CONFLICT (dedup_key) DO UPDATE SET
                        || COALESCE(EXCLUDED.field_provenance,'{}'::jsonb),
     enrichment_hash  = COALESCE(EXCLUDED.enrichment_hash, jobs.enrichment_hash),
     enriched_at      = now(),
-    -- Same "always fresh" reasoning as apply_url/external_id/company_id
-    -- above (a feed re-poll always re-runs formatting on the full current
-    -- description, never a stale-skip) — but guarded with COALESCE anyway
-    -- since format_job_description can legitimately return None (empty
-    -- description), and that must not blank out a previously-good value.
-    formatted_description = COALESCE(EXCLUDED.formatted_description, jobs.formatted_description),
+    -- Preserve the EXISTING formatted_description on re-poll rather than
+    -- overwriting it. Ingest only ever produces the deterministic (plain-
+    -- text) version; the second-phase LLM pass (scripts/format_jobs.py) later
+    -- upgrades that to structured JSON, and a 15-min tier-1 re-poll must not
+    -- clobber that upgrade back down to plain text. On first insert
+    -- jobs.formatted_description is NULL, so the INSERT's deterministic value
+    -- still lands; only conflict-updates keep the better existing value.
+    formatted_description = COALESCE(jobs.formatted_description, EXCLUDED.formatted_description),
     highlights       = CASE WHEN array_length(EXCLUDED.highlights, 1) > 0 THEN EXCLUDED.highlights ELSE jobs.highlights END;
 """
 

@@ -82,7 +82,9 @@ _JSON_SHAPE_HINT = (
 )
 
 
-def format_job_description(description: str | None, use_llm: bool = True) -> dict:
+def format_job_description(
+    description: str | None, use_llm: bool = True, source_note: str | None = None
+) -> dict:
     """Restructures a raw scraped job description into distinct sections
     (overview / responsibilities / requirements / nice-to-have / benefits /
     details) plus up to 6 short highlight facts — PRESERVES all original
@@ -180,6 +182,13 @@ def format_job_description(description: str | None, use_llm: bool = True) -> dic
         structured[k] for k in ("responsibilities", "requirements", "niceToHave", "benefits", "details")
     ):
         return fallback
+
+    # A short-source note (e.g. aggregator snippets whose full JD lives behind
+    # a redirecting apply link) — carried in the structured JSON so the detail
+    # page can point the reader to the apply link for the complete listing.
+    # Added only alongside real structure, never as the sole content.
+    if source_note:
+        structured["sourceNote"] = source_note
 
     highlights = _str_list("highlights")[:6]
     return {"formatted_description": json.dumps(structured), "highlights": highlights, "llm_used": True}

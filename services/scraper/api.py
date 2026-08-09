@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 import contest_scheduler
 import feed_scheduler
+import format_scheduler
 import scheduler
 import skill_miner_scheduler
 from db.repository import connect, flag_if_repost, get_job, update_job_formatting, upsert_job
@@ -231,6 +232,39 @@ def trigger_skill_miner():
     started = skill_miner_scheduler.trigger()
     if not started:
         return {"started": False, "reason": "a mining run is already in progress"}
+    return {"started": True}
+
+
+@app.on_event("startup")
+def _start_format_scheduler() -> None:
+    """A FIFTH, separate BackgroundScheduler/lock (see format_scheduler.py) —
+    the second-phase LLM formatting pass. Ingest already leaves every job with
+    a visible deterministic description; this rolls over the DB on its own
+    interval and upgrades those to LLM-structured sections, decoupled from any
+    ingest sweep so a slow/limited LLM never blocks or hides a job."""
+    bg = BackgroundScheduler()
+    bg.add_job(
+        format_scheduler.format_jobs_scheduled,
+        IntervalTrigger(minutes=format_scheduler.FEED_FORMAT_INTERVAL_MIN),
+        max_instances=1, coalesce=True,
+    )
+    bg.start()
+    logger.info(
+        "Format scheduler started: LLM formatting pass every %dmin",
+        format_scheduler.FEED_FORMAT_INTERVAL_MIN,
+    )
+
+
+@app.get("/jobs/formatting/progress")
+def get_formatting_progress():
+    return format_scheduler.get_progress()
+
+
+@app.post("/jobs/formatting/trigger")
+def trigger_formatting():
+    started = format_scheduler.trigger()
+    if not started:
+        return {"started": False, "reason": "a formatting run is already in progress"}
     return {"started": True}
 
 

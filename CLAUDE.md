@@ -120,15 +120,30 @@ the primary path and works with none of them configured. (LLM billing is current
 all three direct providers, so both scheduled feed runs and the scheduler default to `use_llm=False`
 — formatting still produces real content via deterministic cleanup, it just skips AI classification.)
 
-`api.py` runs **four** independent APScheduler instances (jobs: `scheduler.py`, now Himalayas-only
+`api.py` runs **five** independent APScheduler instances (jobs: `scheduler.py`, now Himalayas-only
 daily; contests: `contest_scheduler.py`; skill vocabulary mining: `skill_miner_scheduler.py`,
 weekly; **v2 feeds: `feed_scheduler.py`, tiered by `company_registry.tier` — tier 1 every 15 min,
 tier 2 hourly, tier 3 daily, plus a daily apply-click auto-tiering pass that promotes the
-most-clicked companies to tier 1**) plus reap jobs (deactivate stale/expired jobs; **delete**
-expired contests outright, since a past-deadline contest has nothing left to register for) and a
-daily `prune_analytics_job` (trims `page_view`/`apply_click` past their retention window — see
-`apps/web`'s analytics bullet above). Manual trigger + progress endpoints exist per source (incl.
-`/feeds/scheduler/trigger/{provider}`) and for the skill miner.
+most-clicked companies to tier 1**; **LLM description formatting: `format_scheduler.py`, every
+`FEED_FORMAT_INTERVAL_MIN` (default 30 min)**) plus reap jobs (deactivate stale/expired jobs;
+**delete** expired contests outright, since a past-deadline contest has nothing left to register
+for) and a daily `prune_analytics_job` (trims `page_view`/`apply_click` past their retention window
+— see `apps/web`'s analytics bullet above). Manual trigger + progress endpoints exist per source
+(incl. `/feeds/scheduler/trigger/{provider}`, `/jobs/formatting/trigger`) and for the skill miner.
+
+**Description formatting is a decoupled two-phase pipeline.** Ingest (feeds + v1) always writes a
+*deterministic* cleaned `formatted_description` (plain text) so a job is visible on the portal
+immediately (the portal only shows jobs where `formatted_description IS NOT NULL` —
+`jobQuery.ts`). The second-phase `format_scheduler.py` pass (`scripts/format_jobs.py`) then rolls
+over the DB and *upgrades* those to the LLM-structured JSON (overview/responsibilities/… sections)
+via the FreeLLMAPI router, so a slow/limited LLM never blocks or hides a job. Candidates are found
+migration-free: an LLM-formatted row's `formatted_description` is a JSON object (starts with `{`),
+a deterministic-only row is plain text, so `WHERE formatted_description IS NULL OR NOT LIKE '{%'`
+selects exactly the not-yet-upgraded rows. Aggregator/short-source jobs get a `sourceNote` embedded
+in the JSON pointing to the apply link for the full JD (rendered by `FormattedJobDescription.tsx`)
+— the LLM restructures what's there but never fabricates a fuller description. **Gotcha:** the feed
+upsert preserves the existing `formatted_description` on re-poll (`COALESCE(jobs., EXCLUDED.)`) so a
+15-min tier-1 re-poll can't clobber an LLM upgrade back down to plain text.
 
 ### v2 feed layer (`services/scraper/feeds/`) — the primary ingestion path
 Additive, fully separate code path from the frozen v1 scrapers (its own HTTP client, upsert, and
