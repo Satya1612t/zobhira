@@ -42,6 +42,10 @@ services:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/job_portal
       FREELLMAPI_BASE_URL: http://freellmapi:3001/v1
       FREELLMAPI_API_KEY: ${FREELLMAPI_API_KEY}
+      # FreeLLMAPI dashboard login (separate from the inference key above) —
+      # read by the admin LLM page (GET /llm/quota) for provider health/usage.
+      FREELLMAPI_ADMIN_EMAIL: ${FREELLMAPI_ADMIN_EMAIL:-}
+      FREELLMAPI_ADMIN_PASSWORD: ${FREELLMAPI_ADMIN_PASSWORD:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
