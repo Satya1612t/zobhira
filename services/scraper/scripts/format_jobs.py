@@ -29,6 +29,7 @@ untouched rows as candidates for the next pass.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import re
 import sys
@@ -177,12 +178,87 @@ def run(limit: int | None = None, batch_size: int = BATCH_SIZE) -> dict:
     return {"processed": processed, "formatted": formatted, "tripped": breaker["tripped"]}
 
 
+# Already-structured (JSON) rows that qualify for the source note but predate
+# the note logic: truncated/short but no "sourceNote" key. The pass in run()
+# never revisits a '{'-row, so these can only be reached here.
+_REFRESH_SELECT_SQL = """
+    SELECT id, description, formatted_description
+    FROM jobs
+    WHERE is_active = true
+      AND description IS NOT NULL AND btrim(description) <> ''
+      AND left(btrim(formatted_description), 1) = '{'
+      AND formatted_description NOT LIKE '%%sourceNote%%'
+      AND (%(last_id)s::uuid IS NULL OR id < %(last_id)s::uuid)
+    ORDER BY id DESC
+    LIMIT %(limit)s
+"""
+
+
+def refresh_truncated(limit: int | None = None, batch_size: int = BATCH_SIZE) -> dict:
+    """Backfill the source note onto already-structured jobs that are
+    truncated/short but were formatted before the note logic existed.
+
+    Does NOT call the LLM — the structure is already there, so it just injects
+    the "sourceNote" key into the existing JSON. Fast and spends zero quota.
+    Only rows _source_note() still classifies as truncated/short are touched;
+    everything else is left exactly as-is. Returns {"processed", "updated"}."""
+    conn = connect()
+    processed = 0
+    updated = 0
+    last_id = None  # UUID keyset cursor (jobs.id); None on the first page
+    try:
+        while limit is None or processed < limit:
+            batch = min(batch_size, (limit - processed)) if limit else batch_size
+            with conn.cursor() as cur:
+                cur.execute(_REFRESH_SELECT_SQL, {"last_id": last_id, "limit": batch})
+                rows = cur.fetchall()
+            if not rows:
+                break
+
+            for row in rows:
+                last_id = row["id"]
+                processed += 1
+                note = _source_note(row["description"])
+                if not note:
+                    continue  # not actually truncated/short — leave it alone
+                try:
+                    data = json.loads(row["formatted_description"])
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                if not isinstance(data, dict) or data.get("sourceNote"):
+                    continue
+                data["sourceNote"] = note
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE jobs SET formatted_description = %(fd)s WHERE id = %(id)s",
+                        {"fd": json.dumps(data), "id": row["id"]},
+                    )
+                updated += 1
+
+            conn.commit()
+            logger.info("Refresh truncated: processed=%d updated=%d", processed, updated)
+            if len(rows) < batch:
+                break
+    finally:
+        conn.close()
+
+    logger.info("Done. processed=%d updated=%d", processed, updated)
+    return {"processed": processed, "updated": updated}
+
+
 def main() -> None:
     load_dotenv()
     parser = argparse.ArgumentParser(description="LLM-format jobs still on the deterministic description.")
     parser.add_argument("--limit", type=int, default=None, help="stop after N jobs (default: all)")
+    parser.add_argument(
+        "--refresh-truncated", action="store_true",
+        help="backfill the source note onto already-structured truncated/short jobs (no LLM call)",
+    )
     args = parser.parse_args()
-    run(limit=args.limit)
+    if args.refresh_truncated:
+        refresh_truncated(limit=args.limit)
+    else:
+        run(limit=args.limit)
 
 
 if __name__ == "__main__":
