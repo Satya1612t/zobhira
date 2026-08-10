@@ -260,6 +260,16 @@ def get_formatting_progress():
     return format_scheduler.get_progress()
 
 
+@app.get("/jobs/formatting/backlog")
+def get_formatting_backlog():
+    """Count of jobs still on the deterministic description (LLM backlog).
+    Separate from /progress so the admin card can poll progress cheaply
+    (in-memory) and this DB count only occasionally."""
+    from scripts.format_jobs import count_pending
+
+    return {"pending": count_pending()}
+
+
 @app.post("/jobs/formatting/trigger")
 def trigger_formatting():
     started = format_scheduler.trigger()

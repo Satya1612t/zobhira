@@ -75,6 +75,27 @@ _UPDATE_SQL = """
 """
 
 
+_COUNT_SQL = """
+    SELECT count(*) AS n
+    FROM jobs
+    WHERE is_active = true
+      AND description IS NOT NULL AND btrim(description) <> ''
+      AND (formatted_description IS NULL OR left(btrim(formatted_description), 1) <> '{')
+"""
+
+
+def count_pending() -> int:
+    """How many visible jobs are still on the deterministic (plain-text)
+    description, i.e. the LLM formatting backlog. Used by the admin card."""
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(_COUNT_SQL)
+            return cur.fetchone()["n"]
+    finally:
+        conn.close()
+
+
 def _source_note(description: str | None) -> str | None:
     words = len(re.findall(r"\S+", description or ""))
     return SOURCE_NOTE_TEXT if words < SHORT_DESC_WORDS else None
