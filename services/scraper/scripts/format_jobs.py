@@ -62,7 +62,12 @@ _SELECT_SQL = """
     WHERE is_active = true
       AND description IS NOT NULL AND btrim(description) <> ''
       AND (formatted_description IS NULL OR left(btrim(formatted_description), 1) <> '{')
-      AND (%(last_id)s IS NULL OR id < %(last_id)s)
+      -- Cast the keyset cursor so Postgres can infer its type on the first
+      -- page, when it's NULL (an untyped NULL param used only in IS NULL /
+      -- comparisons has no inferable type — "could not determine data type").
+      -- jobs.id is a UUID; its byte-order total order makes keyset paging by
+      -- `id < cursor` / `ORDER BY id DESC` stable and correct.
+      AND (%(last_id)s::uuid IS NULL OR id < %(last_id)s::uuid)
     ORDER BY id DESC
     LIMIT %(limit)s
 """
@@ -108,7 +113,7 @@ def run(limit: int | None = None, batch_size: int = BATCH_SIZE) -> dict:
     processed = 0
     formatted = 0
     breaker = {"consecutive_failures": 0, "tripped": False}
-    last_id: int | None = None
+    last_id = None  # UUID keyset cursor (jobs.id); None on the first page
     try:
         while limit is None or processed < limit:
             batch = min(batch_size, (limit - processed)) if limit else batch_size
