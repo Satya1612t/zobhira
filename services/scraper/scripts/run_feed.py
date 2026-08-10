@@ -108,6 +108,28 @@ def _feed_location_is_eligible(posting) -> bool:
     return bool(_GLOBAL_REMOTE_RE.search(loc) and not _NON_INDIA_RESTRICTION_RE.search(loc))
 
 
+def _dedupe_by_external_id(postings: list) -> list:
+    """Collapse postings sharing (source, external_id) to one, preferring an
+    India-located variant. Preserves input order for the kept postings."""
+    chosen: dict = {}
+    order: list = []
+    passthrough: list = []
+    for p in postings:
+        ext = getattr(p, "external_id", None)
+        if not ext:
+            passthrough.append(p)
+            continue
+        key = (getattr(p, "source", None), ext)
+        existing = chosen.get(key)
+        if existing is None:
+            chosen[key] = p
+            order.append(key)
+        elif _INDIA_LOCATION_RE.search(p.location or "") and not _INDIA_LOCATION_RE.search(existing.location or ""):
+            # Upgrade to the India-located variant of the same job.
+            chosen[key] = p
+    return [chosen[k] for k in order] + passthrough
+
+
 def run_feed_provider(provider: str, dry_run: bool = False, use_llm: bool = True, tier: int | None = None) -> int:
     scraper_cls = PROVIDERS[provider]
     scraper = scraper_cls()
@@ -132,6 +154,16 @@ def run_feed_provider(provider: str, dry_run: bool = False, use_llm: bool = True
     dropped = before - len(postings)
     if dropped:
         logger.info("Dropped %d/%d postings from feed provider=%s: location not India or global-remote", dropped, before, provider)
+
+    # De-dupe within this run by (source, external_id). One board job listed at
+    # several locations (e.g. India + Remote-Worldwide) comes back once per
+    # location with the SAME external_id but a different dedup_key; both now
+    # pass the filter above, and storing both would violate the jobs table's
+    # (source, external_id) unique index. Keep ONE, preferring the India-
+    # located variant so the portal shows the India office over a generic
+    # "Remote - Worldwide". Postings with no external_id (shouldn't happen for
+    # feeds, but be safe) are all kept.
+    postings = _dedupe_by_external_id(postings)
 
     # Enrich only the survivors — cheaper than v1's enrich-then-filter order
     # (run_scrape.py::run_source) and safe here specifically because the

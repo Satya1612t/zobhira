@@ -8,8 +8,12 @@ db/migrations/0023_job_feed_columns.sql.
 
 from __future__ import annotations
 
+import logging
+
 import psycopg
 from psycopg.rows import dict_row
+
+logger = logging.getLogger(__name__)
 
 from scripts.run_scrape import has_mandatory_fields
 from utils.dedup import make_dedup_key
@@ -109,6 +113,29 @@ def upsert_feed_job(conn: psycopg.Connection, posting: FeedJobPosting) -> bool:
 
     dedup_key = make_dedup_key(posting.company, posting.title, posting.location)
 
+    # Wrap in a SAVEPOINT so a unique-constraint collision skips just this one
+    # posting instead of aborting the whole run's transaction. The jobs table
+    # has a SECOND unique index — (source, external_id), db/migrations/0023 —
+    # that ON CONFLICT (dedup_key) below can't also target: one Greenhouse job
+    # listed at several locations (e.g. "Bengaluru, India" AND "Remote -
+    # Worldwide") comes back once per location with the SAME id but a different
+    # dedup_key, so the second variant would violate (source, external_id).
+    # run_feed.py de-dupes within a run preferring the India variant, but a
+    # cross-run collision (the other variant already stored yesterday) can
+    # still happen, so this stays defensive.
+    try:
+        with conn.transaction():
+            _execute_upsert(conn, posting, dedup_key)
+    except psycopg.errors.UniqueViolation:
+        logger.info(
+            "Skipped duplicate feed job (source=%s external_id=%s): same job at another location",
+            posting.source, posting.external_id,
+        )
+        return False
+    return True
+
+
+def _execute_upsert(conn: psycopg.Connection, posting: FeedJobPosting, dedup_key: str) -> None:
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             _UPSERT_FEED_JOB_SQL,
@@ -146,4 +173,3 @@ def upsert_feed_job(conn: psycopg.Connection, posting: FeedJobPosting) -> bool:
                 "highlights": posting.highlights,
             },
         )
-    return True
