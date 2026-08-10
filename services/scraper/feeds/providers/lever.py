@@ -12,7 +12,7 @@ GET https://api.lever.co/v0/postings/{token}?mode=json -> a bare JSON array
                              field is frequently a bare city name with no
                              country qualifier ("Bangalore", not "Bangalore,
                              India"). Folded into `location` below so the
-                             shared _feed_location_is_india() check in
+                             shared _feed_location_is_eligible() check in
                              run_feed.py (which only looks at the location
                              string) still catches these correctly.
     categories.commitment -> employment_type seed (raw string: "Full-time",
@@ -59,7 +59,7 @@ class LeverFeedScraper(FeedScraper):
             country = (raw_job.get("country") or "").strip().upper()
             # See module docstring: fold the authoritative country code into
             # the location string itself, since that's the only field the
-            # shared India filter (run_feed.py::_feed_location_is_india)
+            # shared India filter (run_feed.py::_feed_location_is_eligible)
             # actually looks at.
             if country == "IN" and (not location or "india" not in location.lower()):
                 location = f"{location}, India" if location else "India"

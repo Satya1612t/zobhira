@@ -168,9 +168,12 @@ row and a v1 row for the real same job merge onto one row).
   ats_token/tier. Grown via `scripts/seed_registry.py` (from `db/seeds/company_registry.csv`) or
   `scripts/detect_ats.py` (auto-detects a company's ATS + token from just a careers URL, verifies
   against the live board, upserts) — the latter is wired into the admin **Companies** page.
-- **`run_feed.py`** filters every posting to India on the raw `location` string (deliberately NOT
-  reusing `run_scrape.py::is_india_or_remote`, which trusts description-inferred `workplace_type` —
-  unsafe for verbose ATS descriptions that mention "remote" while being country-restricted), then
+- **`run_feed.py`** filters every posting on the raw `location` string via
+  `_feed_location_is_eligible`: keeps India-located roles **and truly-global-remote** ones
+  (location literally says worldwide/anywhere/global), while a country-qualifier guard still drops
+  scoped remote (`Remote - US`/`EMEA`/`APAC`) and bare `Remote`. Deliberately NOT reusing
+  `run_scrape.py::is_india_or_remote`, which trusts description-inferred `workplace_type` — unsafe
+  for verbose ATS descriptions that mention "remote" while being country-restricted), then
   enriches (shared `enrich_posting`), formats (`format_job_description`, which yields real content
   even with no LLM), backfills logos (`find_logo_url`), and upserts. `--no-llm` skips the LLM steps.
 

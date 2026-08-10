@@ -74,9 +74,38 @@ PROVIDERS: dict[str, type[FeedScraper]] = {
 # simpler and safer than trusting body-text-inferred workplace_type.
 _INDIA_LOCATION_RE = re.compile(r"\bindia\b", re.IGNORECASE)
 
+# Truly-global remote — a role open to anywhere on earth, which an India-based
+# candidate can take. A deliberate WHITELIST of unambiguous "anywhere in the
+# world" phrasing; a bare "Remote" or "Fully Remote" is NOT accepted (it
+# usually defaults to a specific country) precisely to avoid re-introducing the
+# non-India leakage this filter exists to stop.
+_GLOBAL_REMOTE_RE = re.compile(
+    r"\b(worldwide|world\s*wide|globally|anywhere"
+    r"|remote\s*[-–—,/]?\s*global|global\s*[-–—,/]?\s*remote)\b",
+    re.IGNORECASE,
+)
+# A country/region qualifier means the "remote" is scoped, NOT global — reject
+# even when a global-ish word also appears ("Anywhere in the US", "Remote -
+# Global, US timezones"). Regional buckets like EMEA/APAC are treated as scoped
+# too (they don't reliably include India). India is intentionally absent — an
+# India mention is already accepted by _INDIA_LOCATION_RE above.
+_NON_INDIA_RESTRICTION_RE = re.compile(
+    r"\b(u\.?s\.?a?|us|united states|americas?|north america|canada|uk|"
+    r"united kingdom|emea|apac|europe(?:an)?|latam|latin america|mexico|brazil|"
+    r"argentina|australia|singapore|germany|france|ireland|poland|portugal|"
+    r"spain|romania|philippines|japan|china|uae|dubai|nigeria|kenya|egypt)\b",
+    re.IGNORECASE,
+)
 
-def _feed_location_is_india(posting) -> bool:
-    return bool(_INDIA_LOCATION_RE.search(posting.location or ""))
+
+def _feed_location_is_eligible(posting) -> bool:
+    """India-located OR truly-global-remote (open to anywhere). Country-scoped
+    remote (Remote - US/EMEA/APAC/…) and bare 'Remote' are excluded — see the
+    regex docstrings above for why the global side is a strict whitelist."""
+    loc = posting.location or ""
+    if _INDIA_LOCATION_RE.search(loc):
+        return True
+    return bool(_GLOBAL_REMOTE_RE.search(loc) and not _NON_INDIA_RESTRICTION_RE.search(loc))
 
 
 def run_feed_provider(provider: str, dry_run: bool = False, use_llm: bool = True, tier: int | None = None) -> int:
@@ -89,18 +118,20 @@ def run_feed_provider(provider: str, dry_run: bool = False, use_llm: bool = True
     postings = scraper.scrape()
     logger.info("Fetched %d postings from feed provider=%s (tier=%s)", len(postings), provider, tier)
 
-    # India filter FIRST, on the raw pre-enrichment location field — see
-    # _feed_location_is_india's docstring above for why this deliberately
+    # Eligibility filter FIRST, on the raw pre-enrichment location field — see
+    # _feed_location_is_eligible's docstring above for why this deliberately
     # doesn't wait for (or use) enrich_posting's workplace_type inference.
     # A global board like Greenhouse's returns every country's openings in
     # one call, and this platform is India-focused (CLAUDE.md's stated
     # invariant), so without this a provider like Cloudflare/Samsara would
-    # flood the shared `jobs` table with hundreds of non-India roles.
+    # flood the shared `jobs` table with hundreds of non-India roles. Accepts
+    # India-located AND truly-global-remote roles (an India candidate can take
+    # the latter); country-scoped remote is still dropped.
     before = len(postings)
-    postings = [p for p in postings if _feed_location_is_india(p)]
+    postings = [p for p in postings if _feed_location_is_eligible(p)]
     dropped = before - len(postings)
     if dropped:
-        logger.info("Dropped %d/%d postings from feed provider=%s: location not India", dropped, before, provider)
+        logger.info("Dropped %d/%d postings from feed provider=%s: location not India or global-remote", dropped, before, provider)
 
     # Enrich only the survivors — cheaper than v1's enrich-then-filter order
     # (run_scrape.py::run_source) and safe here specifically because the
