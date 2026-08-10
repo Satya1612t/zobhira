@@ -9,6 +9,20 @@ import { SHOW_UNRELEASED_NAV } from "@/lib/authNavFlags";
 const VALID_PLATFORMS = ["telegram", "whatsapp", "instagram", "youtube", "linkedin"];
 const SITE_ORIGIN = "https://zobhira.com";
 
+// Tag every dispatched link back to our own site with a UTM naming the
+// platform it was posted to. Social/in-app browsers (Telegram, Instagram,
+// WhatsApp) strip the Referer header, so WITHOUT this the click arrives with
+// no referrer and no UTM and resolveAttribution() (see lib/analytics.ts) can
+// only bucket it as "direct" — which is why dispatched traffic was invisible
+// in the source breakdown. The platform value matches the source names
+// analytics already recognises (telegram/instagram/…), so no read-side change
+// is needed. Only OUR domain links get tagged; the external apply URL
+// (sourceUrl) is the employer's site and is left untouched.
+function withUtm(url: string, platform: string): string {
+  const q = `utm_source=${encodeURIComponent(platform)}&utm_medium=social&utm_campaign=dispatch`;
+  return url.includes("?") ? `${url}&${q}` : `${url}?${q}`;
+}
+
 // "We can share 2 posts at a time" — a single combined cap per call.
 // Applies independently to jobs and contests.
 const BATCH_SIZE = 2;
@@ -207,7 +221,7 @@ export async function GET(request: NextRequest) {
         highlights: job.highlights.slice(0, 3),
         logoUrl: job.logoUrl,
         descriptionSnippet,
-        detailUrl: `${SITE_ORIGIN}/jobs/${job.id}`,
+        detailUrl: withUtm(`${SITE_ORIGIN}/jobs/${job.id}`, platform),
         postedAt: job.postedAt,
         deadlineAt: job.deadlineAt,
       });
@@ -251,7 +265,7 @@ export async function GET(request: NextRequest) {
         prizeSummary: contest.prizeSummary,
         sourceUrl: contest.sourceUrl,
         tags: contest.tags,
-        detailUrl: `${SITE_ORIGIN}/contest/${contest.id}`,
+        detailUrl: withUtm(`${SITE_ORIGIN}/contest/${contest.id}`, platform),
         startsAt: contest.startsAt,
         deadlineAt: contest.deadlineAt,
       });
