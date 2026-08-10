@@ -14,13 +14,13 @@ from __future__ import annotations
 
 import argparse
 import logging
-import re
 
 from dotenv import load_dotenv
 
 from db.repository import connect
 from feeds.feed_base import FeedScraper
 from feeds.feed_repository import upsert_feed_job
+from feeds.location_filter import is_eligible_location, is_india_location
 from feeds.providers.adzuna import AdzunaFeedScraper
 from feeds.providers.ashby import AshbyFeedScraper
 from feeds.providers.careerjet import CareerjetFeedScraper
@@ -71,41 +71,11 @@ PROVIDERS: dict[str, type[FeedScraper]] = {
 # providers/greenhouse.py's mapping table) — real India-eligible postings
 # always say so directly in location itself ("India", "Bengaluru, India",
 # "Remote - India", "Remote India"), so trusting that field alone is both
-# simpler and safer than trusting body-text-inferred workplace_type.
-_INDIA_LOCATION_RE = re.compile(r"\bindia\b", re.IGNORECASE)
-
-# Truly-global remote — a role open to anywhere on earth, which an India-based
-# candidate can take. A deliberate WHITELIST of unambiguous "anywhere in the
-# world" phrasing; a bare "Remote" or "Fully Remote" is NOT accepted (it
-# usually defaults to a specific country) precisely to avoid re-introducing the
-# non-India leakage this filter exists to stop.
-_GLOBAL_REMOTE_RE = re.compile(
-    r"\b(worldwide|world\s*wide|globally|anywhere"
-    r"|remote\s*[-–—,/]?\s*global|global\s*[-–—,/]?\s*remote)\b",
-    re.IGNORECASE,
-)
-# A country/region qualifier means the "remote" is scoped, NOT global — reject
-# even when a global-ish word also appears ("Anywhere in the US", "Remote -
-# Global, US timezones"). Regional buckets like EMEA/APAC are treated as scoped
-# too (they don't reliably include India). India is intentionally absent — an
-# India mention is already accepted by _INDIA_LOCATION_RE above.
-_NON_INDIA_RESTRICTION_RE = re.compile(
-    r"\b(u\.?s\.?a?|us|united states|americas?|north america|canada|uk|"
-    r"united kingdom|emea|apac|europe(?:an)?|latam|latin america|mexico|brazil|"
-    r"argentina|australia|singapore|germany|france|ireland|poland|portugal|"
-    r"spain|romania|philippines|japan|china|uae|dubai|nigeria|kenya|egypt)\b",
-    re.IGNORECASE,
-)
-
-
+# simpler and safer than trusting body-text-inferred workplace_type. The
+# India/global-remote rule itself lives in feeds/location_filter.py so every
+# provider (incl. workday's own pre-filter) reuses the exact same logic.
 def _feed_location_is_eligible(posting) -> bool:
-    """India-located OR truly-global-remote (open to anywhere). Country-scoped
-    remote (Remote - US/EMEA/APAC/…) and bare 'Remote' are excluded — see the
-    regex docstrings above for why the global side is a strict whitelist."""
-    loc = posting.location or ""
-    if _INDIA_LOCATION_RE.search(loc):
-        return True
-    return bool(_GLOBAL_REMOTE_RE.search(loc) and not _NON_INDIA_RESTRICTION_RE.search(loc))
+    return is_eligible_location(posting.location)
 
 
 def _dedupe_by_external_id(postings: list) -> list:
@@ -124,7 +94,7 @@ def _dedupe_by_external_id(postings: list) -> list:
         if existing is None:
             chosen[key] = p
             order.append(key)
-        elif _INDIA_LOCATION_RE.search(p.location or "") and not _INDIA_LOCATION_RE.search(existing.location or ""):
+        elif is_india_location(p.location) and not is_india_location(existing.location):
             # Upgrade to the India-located variant of the same job.
             chosen[key] = p
     return [chosen[k] for k in order] + passthrough

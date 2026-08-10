@@ -34,18 +34,24 @@ from datetime import date, datetime
 
 from feeds.feed_base import FeedJobPosting, FeedScraper
 from feeds.feed_http import make_client
+from feeds.location_filter import is_eligible_location
 from utils.rate_limit import throttle
 from utils.text import strip_html
 
 logger = logging.getLogger(__name__)
 
-# One search per city — each returns only that city's matches (efficient),
-# and every result's location already carries the country ("India, <city>"),
-# so run_feed.py's India filter passes without extra work.
+# One search per term — each returns only that term's matches (efficient).
+# City terms surface India-located roles ("India, <city>"); the remote terms
+# surface globally-remote roles an India candidate can take. Every result is
+# still gated by is_eligible_location() below, so a remote search that returns
+# a country-scoped "Remote - US" role is dropped — the search terms only widen
+# what Workday hands back, the filter decides what's kept.
 _INDIA_CITIES = [
     "Bengaluru", "Bangalore", "Mumbai", "Pune", "Hyderabad", "Gurugram",
     "Gurgaon", "Delhi", "Chennai", "Noida", "Kolkata", "Ahmedabad",
 ]
+_REMOTE_TERMS = ["Remote", "Worldwide", "Anywhere"]
+_SEARCH_TERMS = _INDIA_CITIES + _REMOTE_TERMS
 _PAGE_SIZE = 20
 _MAX_PAGES_PER_CITY = 5  # safety cap; India results per city are small
 
@@ -96,19 +102,19 @@ class WorkdayFeedScraper(FeedScraper):
                 api = _api_base(tenant, wd, site)
                 seen_paths: set[str] = set()
                 count_before = len(out)
-                for city in _INDIA_CITIES:
+                for term in _SEARCH_TERMS:
                     offset = 0
                     for _ in range(_MAX_PAGES_PER_CITY):
                         throttle(api)
                         try:
                             resp = client.post(
                                 f"{api}/jobs",
-                                json={"limit": _PAGE_SIZE, "offset": offset, "searchText": city, "appliedFacets": {}},
+                                json={"limit": _PAGE_SIZE, "offset": offset, "searchText": term, "appliedFacets": {}},
                             )
                             resp.raise_for_status()
                             data = resp.json()
-                        except Exception as exc:  # noqa: BLE001 — one bad city/page mustn't sink the run
-                            logger.warning("workday %s city=%s failed: %s", company["slug"], city, exc)
+                        except Exception as exc:  # noqa: BLE001 — one bad term/page mustn't sink the run
+                            logger.warning("workday %s term=%s failed: %s", company["slug"], term, exc)
                             break
                         postings = data.get("jobPostings", [])
                         for raw_job in postings:
@@ -117,8 +123,10 @@ class WorkdayFeedScraper(FeedScraper):
                             if not path or path in seen_paths:
                                 continue
                             # Guard: searchText can match description text, so
-                            # only keep rows whose location actually says India.
-                            if "india" not in loc.lower():
+                            # keep only rows whose location is India-located or
+                            # truly-global-remote (same rule the rest of the
+                            # feed layer applies — feeds/location_filter.py).
+                            if not is_eligible_location(loc):
                                 continue
                             seen_paths.add(path)
                             out.append(self._stub(company, tenant, wd, site, raw_job, loc))
@@ -126,7 +134,7 @@ class WorkdayFeedScraper(FeedScraper):
                         offset += _PAGE_SIZE
                         if offset >= total or not postings:
                             break
-                logger.info("workday company=%s -> %d India postings", company["slug"], len(out) - count_before)
+                logger.info("workday company=%s -> %d eligible postings", company["slug"], len(out) - count_before)
         return out
 
     def _stub(self, company: dict, tenant: str, wd: str, site: str, raw_job: dict, location: str) -> FeedJobPosting:
