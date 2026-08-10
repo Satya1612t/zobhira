@@ -51,6 +51,12 @@ BATCH_SIZE = 100
 # the apply link for the complete listing rather than pretending the snippet
 # is the whole job.
 SHORT_DESC_WORDS = 60
+# A trailing ellipsis is an explicit truncation marker: some boards cut the JD
+# mid-sentence ("…working closely with senior team members …") while still
+# leaving it well over SHORT_DESC_WORDS, so word count alone misses these.
+# Treat any description that ends in "…" or "..." as truncated regardless of
+# length.
+_TRUNCATED_RE = re.compile(r"(\.\.\.|…)\s*$")
 SOURCE_NOTE_TEXT = (
     "This is a condensed summary from the original listing. Click Apply to "
     "view the complete job description and all details."
@@ -102,8 +108,11 @@ def count_pending() -> int:
 
 
 def _source_note(description: str | None) -> str | None:
-    words = len(re.findall(r"\S+", description or ""))
-    return SOURCE_NOTE_TEXT if words < SHORT_DESC_WORDS else None
+    text = (description or "").strip()
+    words = len(re.findall(r"\S+", text))
+    if words < SHORT_DESC_WORDS or _TRUNCATED_RE.search(text):
+        return SOURCE_NOTE_TEXT
+    return None
 
 
 def run(limit: int | None = None, batch_size: int = BATCH_SIZE) -> dict:
