@@ -41,5 +41,10 @@ COPY --from=build /app/.next/static ./.next/static
 # 404s in production despite working fine in dev.
 COPY --from=build /app/public ./public
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
+# fast-geoip loads its IP→country data files at runtime via fs (not a JS
+# import), so Next's standalone file-tracing doesn't include them — the
+# package's JS is traced but its data/ dir is not. Copy it in explicitly, or
+# the country lookup in /api/track throws and every country comes back null.
+COPY --from=build /app/node_modules/fast-geoip/data ./node_modules/fast-geoip/data
 EXPOSE 3000
 CMD ["node", "server.js"]

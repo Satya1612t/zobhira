@@ -1,8 +1,37 @@
 import { NextResponse, type NextRequest } from "next/server";
+import geoip from "fast-geoip";
 import { prisma } from "@/lib/prisma";
 
 // Prisma is Node-only; this route can't run on Edge.
 export const runtime = "nodejs";
+
+// Resolve the visitor's country. Prod sits behind nginx-proxy (not
+// Cloudflare), so the old `cf-ipcountry` header never exists — country was
+// always null. Derive it from the forwarded client IP via an OFFLINE GeoIP
+// lookup instead (fast-geoip reads a few KB per call, no external request, so
+// it can't slow or block the track write). Still prefers a CDN country header
+// if one is ever present, so putting Cloudflare in front later just works.
+function clientIpFrom(request: NextRequest): string | null {
+  // X-Forwarded-For is "client, proxy1, proxy2…" — the leftmost entry is the
+  // original visitor (nginx-proxy appends the immediate peer on the right).
+  const xff = request.headers.get("x-forwarded-for");
+  const first = xff?.split(",")[0]?.trim();
+  if (first) return first;
+  return request.headers.get("x-real-ip");
+}
+
+async function countryFrom(request: NextRequest): Promise<string | null> {
+  const cf = request.headers.get("cf-ipcountry");
+  if (cf && cf !== "XX") return cf; // XX = Cloudflare "unknown"
+  const ip = clientIpFrom(request);
+  if (!ip) return null;
+  try {
+    const geo = await geoip.lookup(ip);
+    return geo?.country ?? null; // 2-letter ISO, same shape cf-ipcountry used
+  } catch {
+    return null; // a geo miss must never break the track write
+  }
+}
 
 // Your own scrapers, Playwright, Googlebot, and uptime checks all hit these
 // pages. Filtering at write time keeps them out of the numbers permanently —
@@ -65,7 +94,7 @@ export async function POST(request: NextRequest) {
           utmMedium: attribution.medium,
           utmCampaign: attribution.campaign,
           device: deviceFrom(ua),
-          country: request.headers.get("cf-ipcountry") ?? null,
+          country: await countryFrom(request),
         },
       });
     } else if (
