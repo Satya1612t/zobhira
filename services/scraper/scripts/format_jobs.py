@@ -42,7 +42,6 @@ from db.repository import connect  # noqa: E402
 from utils.job_formatter import (  # noqa: E402
     BREAKER_THRESHOLD,
     format_job_description,
-    strip_source_attribution,
     strip_truncated_fragments,
 )
 
@@ -251,17 +250,15 @@ def refresh_truncated(limit: int | None = None, batch_size: int = BATCH_SIZE) ->
     return {"processed": processed, "updated": updated}
 
 
-# Rows whose stored formatted_description still carries source attribution
-# ("Himalayas") or cut-off "…" fragments — cleaned in place, no LLM. Escapes for
-# psycopg pyformat: the literal % of LIKE become %%.
+# Rows whose stored formatted_description still carries cut-off "…" fragments —
+# cleaned in place, no LLM. Escapes for psycopg pyformat: literal % becomes %%.
 _RECLEAN_SELECT_SQL = """
     SELECT id, formatted_description
     FROM jobs
     WHERE is_active = true
       AND formatted_description IS NOT NULL
       AND (formatted_description LIKE '%%...%%'
-           OR formatted_description LIKE '%%…%%'
-           OR formatted_description ILIKE '%%himalayas%%')
+           OR formatted_description LIKE '%%…%%')
       AND (%(last_id)s::uuid IS NULL OR id < %(last_id)s::uuid)
     ORDER BY id DESC
     LIMIT %(limit)s
@@ -271,13 +268,13 @@ _STRUCTURED_KEYS = ("responsibilities", "requirements", "niceToHave", "benefits"
 
 
 def _clean_value(text: str) -> str:
-    return strip_truncated_fragments(strip_source_attribution(text)).strip()
+    return strip_truncated_fragments(text).strip()
 
 
 def _reclean_formatted(fd: str) -> str | None:
-    """Strip attribution + truncated fragments from a stored formatted_description.
-    Returns the cleaned value, or None when nothing real survives (the job then
-    falls out of the portal, per the 'hidden if empty' choice)."""
+    """Strip cut-off '…' fragments from a stored formatted_description. Returns
+    the cleaned value, or None when nothing real survives (the job then falls
+    out of the portal, per the 'hidden if empty' choice)."""
     if fd.lstrip().startswith("{"):
         try:
             data = json.loads(fd)
@@ -299,9 +296,9 @@ def _reclean_formatted(fd: str) -> str | None:
 
 
 def reclean(limit: int | None = None, batch_size: int = BATCH_SIZE) -> dict:
-    """One-time cleanup of already-stored descriptions: removes embedded source
-    attribution and cut-off '…' fragments in place. No LLM call. Rows left with
-    no real content get formatted_description=NULL (hidden)."""
+    """One-time cleanup of already-stored descriptions: removes cut-off '…'
+    fragments in place. No LLM call. Rows left with no real content get
+    formatted_description=NULL (hidden)."""
     conn = connect()
     processed = 0
     changed = 0
@@ -349,7 +346,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--reclean", action="store_true",
-        help="strip embedded source attribution + cut-off '…' fragments from stored descriptions (no LLM)",
+        help="strip cut-off '…' fragments from stored descriptions (no LLM)",
     )
     args = parser.parse_args()
     if args.reclean:
