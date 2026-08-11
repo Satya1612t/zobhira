@@ -14,9 +14,10 @@ type AuditAction =
   | "feed_scheduler.trigger"
   | "company.add"
   | "company.set_active"
-  | "company.delete";
+  | "company.delete"
+  | "analytics.clear";
 
-type AuditTargetType = "job" | "contest" | "source" | "scheduler" | "company";
+type AuditTargetType = "job" | "contest" | "source" | "scheduler" | "company" | "analytics";
 
 // Fire-and-forget by design: a logging failure must never block or fail the
 // admin action it's recording. Errors are swallowed (not silently ignored —

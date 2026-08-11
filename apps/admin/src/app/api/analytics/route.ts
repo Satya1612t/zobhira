@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/firebase-admin";
 
-const RANGES: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90 };
+const RANGES: Record<string, number> = { "1d": 1, "7d": 7, "30d": 30, "90d": 90 };
 
 export async function GET(request: Request) {
   const admin = await requireAdmin(request);

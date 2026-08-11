@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { adminFetch } from "@/lib/adminFetch";
+import { useToast } from "@/components/Toast";
 
 type Totals = {
   visitors: number; sessions: number; pageViews: number;
@@ -21,7 +22,7 @@ type Payload = {
   totals: Totals; bySource: SourceRow[]; topContent: ContentRow[]; daily: DayRow[];
 };
 
-const RANGES = ["7d", "30d", "90d"] as const;
+const RANGES = ["1d", "7d", "30d", "90d"] as const;
 
 const num: React.CSSProperties = { fontVariantNumeric: "tabular-nums" };
 
@@ -67,10 +68,13 @@ const td: React.CSSProperties = {
 };
 
 export function AdminAnalytics() {
+  const { showToast } = useToast();
   const [range, setRange] = useState<(typeof RANGES)[number]>("30d");
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reloadTick, setReloadTick] = useState(0);
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,7 +90,25 @@ export function AdminAnalytics() {
       .catch(() => { if (!cancelled) setError("Could not load analytics."); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [range]);
+  }, [range, reloadTick]);
+
+  // TEMPORARY: wipe all analytics so numbers restart clean after the
+  // attribution fixes. Remove this + the button + /api/analytics/clear once done.
+  async function handleClear() {
+    if (!window.confirm("Delete ALL analytics data (page views + apply clicks)? This cannot be undone.")) return;
+    setClearing(true);
+    try {
+      const res = await adminFetch("/api/analytics/clear", { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body.ok) throw new Error();
+      showToast("Analytics cleared.", "success");
+      setReloadTick((t) => t + 1);
+    } catch {
+      showToast("Could not clear analytics.", "error");
+    } finally {
+      setClearing(false);
+    }
+  }
 
   const maxVisitors = Math.max(1, ...(data?.bySource.map((s) => s.visitors) ?? []));
   const maxDaily = Math.max(1, ...(data?.daily.map((d) => d.visitors) ?? []));
@@ -97,7 +119,7 @@ export function AdminAnalytics() {
         <h1 style={{ fontFamily: "var(--font-display)", fontSize: 19, fontWeight: 600, margin: 0, color: "var(--ink)" }}>
           Analytics
         </h1>
-        <div style={{ display: "flex", gap: 4 }}>
+        <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
           {RANGES.map((r) => (
             <button
               key={r}
@@ -116,6 +138,21 @@ export function AdminAnalytics() {
               {r}
             </button>
           ))}
+          {/* TEMPORARY — remove once the analytics reset is done. */}
+          <button
+            type="button"
+            onClick={handleClear}
+            disabled={clearing}
+            title="Delete all analytics data"
+            style={{
+              padding: "5px 11px", fontSize: 12.5, cursor: clearing ? "not-allowed" : "pointer",
+              borderRadius: "var(--radius-sm)", marginLeft: 8,
+              border: "1px solid var(--warn)",
+              background: "var(--surface)", color: "var(--warn)", fontWeight: 600,
+            }}
+          >
+            {clearing ? "Clearing…" : "Clear data"}
+          </button>
         </div>
       </div>
 
