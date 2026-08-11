@@ -68,6 +68,47 @@ def strip_ui_toggle_text(text: str) -> str:
     return "\n".join(lines)
 
 
+# A scraped board can embed its own source name in the description body
+# ("Originally posted on Himalayas"). apps/web deliberately never surfaces a
+# third-party source name to end users (CLAUDE.md's branding invariant), so any
+# line naming the source is dropped from the cleaned text. Whole-word match so
+# it can't clip an unrelated word.
+_SOURCE_ATTRIBUTION_RE = re.compile(r"(?im)^.*\bhimalayas\b.*$")
+
+
+def strip_source_attribution(text: str) -> str:
+    return "\n".join(
+        line for line in text.splitlines() if not _SOURCE_ATTRIBUTION_RE.match(line)
+    )
+
+
+# Aggregator previews (Adzuna/Careerjet/Jooble) truncate the JD mid-sentence
+# with a trailing "…"/"...". Those cut-off fragments read as broken content, so
+# drop them: keep the complete sentences before the truncation on a line, and
+# if the line has no earlier sentence end it's a pure fragment ("About High
+# Advoca…") — drop the whole line. A job left with nothing real then falls back
+# to empty (hidden) rather than showing garbage; the "click Apply" note still
+# points readers to the full listing.
+_TRUNCATED_TAIL_RE = re.compile(r"^(.*[.!?])\s+\S.*?(?:\.\.\.|…)\s*$")
+
+
+def strip_truncated_fragments(text: str) -> str:
+    out = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            out.append(line)
+            continue
+        if stripped.endswith("...") or stripped.endswith("…"):
+            keep = _TRUNCATED_TAIL_RE.match(stripped)
+            if keep:
+                out.append(keep.group(1))
+            # else: whole line is a truncated fragment — drop it
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
 # Structured shape (replaces the old plain-prose "formatted_description"
 # string) — stored JSON-encoded in the same TEXT column, no migration
 # needed. Every list is best-effort: a bullet that doesn't clearly belong
@@ -113,7 +154,9 @@ def format_job_description(
     if not description or not description.strip():
         return empty
 
-    cleaned = strip_ui_toggle_text(strip_empty_label_lines(description))
+    cleaned = strip_truncated_fragments(
+        strip_source_attribution(strip_ui_toggle_text(strip_empty_label_lines(description)))
+    )
     # Fallback if every LLM provider fails below — plain cleaned text,
     # same shape FormattedJobDescription.tsx already renders as prose for
     # any pre-existing (old-format) formatted_description row.

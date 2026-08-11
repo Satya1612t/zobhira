@@ -39,7 +39,12 @@ from dotenv import load_dotenv
 sys.path.insert(0, ".")
 
 from db.repository import connect  # noqa: E402
-from utils.job_formatter import BREAKER_THRESHOLD, format_job_description  # noqa: E402
+from utils.job_formatter import (  # noqa: E402
+    BREAKER_THRESHOLD,
+    format_job_description,
+    strip_source_attribution,
+    strip_truncated_fragments,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -246,6 +251,94 @@ def refresh_truncated(limit: int | None = None, batch_size: int = BATCH_SIZE) ->
     return {"processed": processed, "updated": updated}
 
 
+# Rows whose stored formatted_description still carries source attribution
+# ("Himalayas") or cut-off "…" fragments — cleaned in place, no LLM. Escapes for
+# psycopg pyformat: the literal % of LIKE become %%.
+_RECLEAN_SELECT_SQL = """
+    SELECT id, formatted_description
+    FROM jobs
+    WHERE is_active = true
+      AND formatted_description IS NOT NULL
+      AND (formatted_description LIKE '%%...%%'
+           OR formatted_description LIKE '%%…%%'
+           OR formatted_description ILIKE '%%himalayas%%')
+      AND (%(last_id)s::uuid IS NULL OR id < %(last_id)s::uuid)
+    ORDER BY id DESC
+    LIMIT %(limit)s
+"""
+
+_STRUCTURED_KEYS = ("responsibilities", "requirements", "niceToHave", "benefits", "details")
+
+
+def _clean_value(text: str) -> str:
+    return strip_truncated_fragments(strip_source_attribution(text)).strip()
+
+
+def _reclean_formatted(fd: str) -> str | None:
+    """Strip attribution + truncated fragments from a stored formatted_description.
+    Returns the cleaned value, or None when nothing real survives (the job then
+    falls out of the portal, per the 'hidden if empty' choice)."""
+    if fd.lstrip().startswith("{"):
+        try:
+            data = json.loads(fd)
+        except json.JSONDecodeError:
+            return fd  # leave malformed rows untouched
+        if not isinstance(data, dict):
+            return fd
+        overview = _clean_value(str(data.get("overview") or "")) or None
+        lists = {k: [c for it in (data.get(k) or []) if (c := _clean_value(str(it)))] for k in _STRUCTURED_KEYS}
+        if not overview and not any(lists.values()):
+            return None  # only junk was in here — hide the job
+        out: dict = {"overview": overview, **lists}
+        note = data.get("sourceNote")
+        if isinstance(note, str) and note:
+            out["sourceNote"] = note
+        return json.dumps(out)
+    # Deterministic (plain-text) row.
+    return _clean_value(fd) or None
+
+
+def reclean(limit: int | None = None, batch_size: int = BATCH_SIZE) -> dict:
+    """One-time cleanup of already-stored descriptions: removes embedded source
+    attribution and cut-off '…' fragments in place. No LLM call. Rows left with
+    no real content get formatted_description=NULL (hidden)."""
+    conn = connect()
+    processed = 0
+    changed = 0
+    hidden = 0
+    last_id = None
+    try:
+        while limit is None or processed < limit:
+            batch = min(batch_size, (limit - processed)) if limit else batch_size
+            with conn.cursor() as cur:
+                cur.execute(_RECLEAN_SELECT_SQL, {"last_id": last_id, "limit": batch})
+                rows = cur.fetchall()
+            if not rows:
+                break
+            for row in rows:
+                last_id = row["id"]
+                processed += 1
+                cleaned = _reclean_formatted(row["formatted_description"])
+                if cleaned == row["formatted_description"]:
+                    continue
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE jobs SET formatted_description = %(fd)s WHERE id = %(id)s",
+                        {"fd": cleaned, "id": row["id"]},
+                    )
+                changed += 1
+                if cleaned is None:
+                    hidden += 1
+            conn.commit()
+            logger.info("Reclean: processed=%d changed=%d hidden=%d", processed, changed, hidden)
+            if len(rows) < batch:
+                break
+    finally:
+        conn.close()
+    logger.info("Done. processed=%d changed=%d hidden=%d", processed, changed, hidden)
+    return {"processed": processed, "changed": changed, "hidden": hidden}
+
+
 def main() -> None:
     load_dotenv()
     parser = argparse.ArgumentParser(description="LLM-format jobs still on the deterministic description.")
@@ -254,8 +347,14 @@ def main() -> None:
         "--refresh-truncated", action="store_true",
         help="backfill the source note onto already-structured truncated/short jobs (no LLM call)",
     )
+    parser.add_argument(
+        "--reclean", action="store_true",
+        help="strip embedded source attribution + cut-off '…' fragments from stored descriptions (no LLM)",
+    )
     args = parser.parse_args()
-    if args.refresh_truncated:
+    if args.reclean:
+        reclean(limit=args.limit)
+    elif args.refresh_truncated:
         refresh_truncated(limit=args.limit)
     else:
         run(limit=args.limit)
