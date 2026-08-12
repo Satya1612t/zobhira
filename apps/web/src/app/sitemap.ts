@@ -25,6 +25,7 @@ const STATIC_ROUTES: Array<{
   { path: "/jobs", priority: 0.9, changeFrequency: "hourly" },
   ...(SHOW_UNRELEASED_NAV ? [{ path: "/contest", priority: 0.9, changeFrequency: "hourly" as const }] : []),
   { path: "/today", priority: 0.8, changeFrequency: "hourly" },
+  { path: "/certifications", priority: 0.8, changeFrequency: "weekly" },
   { path: "/about", priority: 0.5, changeFrequency: "monthly" },
   { path: "/contact", priority: 0.4, changeFrequency: "yearly" },
   { path: "/privacy", priority: 0.3, changeFrequency: "yearly" },
@@ -38,12 +39,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // jobs (fetched but not yet formatted) would enter the sitemap and 404
   // when a crawler visits them — a documented cause of soft-404 penalties.
   const VISIBLE_JOB = { isActive: true, formattedDescription: { not: null } } as const;
-  const [jobs, contests, activeJobsForCounts] = await Promise.all([
+  const [jobs, contests, activeJobsForCounts, certifications] = await Promise.all([
     prisma.job.findMany({ where: VISIBLE_JOB, select: { id: true, lastScrapedAt: true } }),
     SHOW_UNRELEASED_NAV
       ? prisma.contest.findMany({ where: { isActive: true }, select: { id: true, lastScrapedAt: true } })
       : Promise.resolve([]),
     prisma.job.findMany({ where: VISIBLE_JOB, select: { tags: true, location: true } }),
+    // Published only — a draft slug in the sitemap causes the same soft-404
+    // penalty the stub-job comment above warns about.
+    prisma.certification.findMany({
+      where: { publishStatus: "published" },
+      select: { slug: true, updatedAt: true },
+    }),
   ]);
 
   // One in-memory pass over every active job rather than 58 x 12 separate
@@ -84,5 +91,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  return [...staticEntries, ...jobEntries, ...contestEntries, ...listingEntries];
+  const certificationEntries: MetadataRoute.Sitemap = certifications.map((cert) => ({
+    url: `${BASE_URL}/certifications/${cert.slug}`,
+    lastModified: cert.updatedAt,
+    changeFrequency: "weekly",
+    priority: 0.7,
+  }));
+
+  return [...staticEntries, ...jobEntries, ...contestEntries, ...listingEntries, ...certificationEntries];
 }

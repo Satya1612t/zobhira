@@ -110,9 +110,19 @@ export function CertificationsManager() {
           Needs verifying
         </label>
         <Link
+          href="/certifications/partners"
+          style={{
+            marginLeft: "auto", padding: "8px 14px", borderRadius: "var(--radius-sm)",
+            border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink-muted)",
+            fontSize: 13, fontWeight: 600, textDecoration: "none",
+          }}
+        >
+          Partner clicks →
+        </Link>
+        <Link
           href="/certifications/new"
           style={{
-            marginLeft: "auto", padding: "8px 16px", borderRadius: "var(--radius-sm)",
+            padding: "8px 16px", borderRadius: "var(--radius-sm)",
             border: "1px solid var(--line)", background: "var(--accent)", color: "var(--accent-ink)",
             fontSize: 13, fontWeight: 600, textDecoration: "none",
           }}

@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
 
   const attribution = readAttribution(request.cookies.get("zb_src")?.value);
 
-  let body: { type?: string; path?: string; contentType?: string; contentId?: string };
+  let body: { type?: string; path?: string; contentType?: string; contentId?: string; certificationId?: string };
   try {
     body = await request.json();
   } catch {
@@ -112,6 +112,32 @@ export async function POST(request: NextRequest) {
           trafficSource: attribution.source,
         },
       });
+    } else if (
+      body.type === "partner_click" &&
+      body.certificationId &&
+      UUID_RE.test(body.certificationId)
+    ) {
+      // Snapshot provider/network/monetised AT CLICK TIME — a later re-price or
+      // a changed deal must not rewrite what past clicks were worth. Separate
+      // table from apply_click on purpose (it must not corrupt the job/contest
+      // engagement numbers the admin dashboard reads).
+      const cert = await prisma.certification.findUnique({
+        where: { id: body.certificationId },
+        select: { providerSlug: true, affiliateNetwork: true, affiliateUrl: true },
+      });
+      if (cert) {
+        await prisma.partnerClick.create({
+          data: {
+            visitorId,
+            sessionId,
+            certificationId: body.certificationId,
+            providerSlug: cert.providerSlug,
+            affiliateNetwork: cert.affiliateNetwork,
+            isMonetised: cert.affiliateUrl != null,
+            trafficSource: attribution.source,
+          },
+        });
+      }
     }
   } catch (error) {
     // Analytics must never break a page load or an apply click.

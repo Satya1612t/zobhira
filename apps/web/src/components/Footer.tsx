@@ -62,6 +62,7 @@ const FIND_WORK = [
   { label: "All jobs", href: "/jobs" },
   { label: "Fresher roles", href: "/jobs?experienceLevel=fresher" },
   { label: "Remote roles", href: "/jobs?workplaceType=remote" },
+  { label: "Certifications", href: "/certifications" },
 ];
 
 const COMPETE = [
