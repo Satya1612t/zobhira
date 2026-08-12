@@ -15,9 +15,14 @@ type AuditAction =
   | "company.add"
   | "company.set_active"
   | "company.delete"
-  | "analytics.clear";
+  | "analytics.clear"
+  | "certification.create"
+  | "certification.update"
+  | "certification.publish"
+  | "certification.unpublish"
+  | "certification.delete";
 
-type AuditTargetType = "job" | "contest" | "source" | "scheduler" | "company" | "analytics";
+type AuditTargetType = "job" | "contest" | "source" | "scheduler" | "company" | "analytics" | "certification";
 
 // Fire-and-forget by design: a logging failure must never block or fail the
 // admin action it's recording. Errors are swallowed (not silently ignored —

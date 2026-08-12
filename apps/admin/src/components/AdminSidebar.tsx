@@ -61,6 +61,15 @@ function CompaniesIcon() {
     </svg>
   );
 }
+function CertificationsIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="9" r="6" />
+      <path d="M9 13.5 7.5 21l4.5-2.5L16.5 21 15 13.5" />
+      <path d="m9.5 9 1.7 1.7L15 7" />
+    </svg>
+  );
+}
 function ProgressIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -101,6 +110,7 @@ const TABS = [
   { label: "Contests", href: "/contests", Icon: ContestsIcon },
   { label: "Scheduler", href: "/scheduler", Icon: SchedulerIcon },
   { label: "Companies", href: "/companies", Icon: CompaniesIcon },
+  { label: "Certifications", href: "/certifications", Icon: CertificationsIcon },
   { label: "Sources", href: "/sources", Icon: SourcesIcon },
   { label: "LLM", href: "/llm", Icon: LlmIcon },
   { label: "Analytics", href: "/analytics", Icon: AnalyticsIcon },

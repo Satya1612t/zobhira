@@ -197,3 +197,73 @@ model ApplyClick {
   @@index([contentType, contentId])
   @@map("apply_click")
 }
+
+// Hand-curated certification catalogue (db/migrations/0032). Deliberately
+// has no scraper/scheduler behind it — small, slow-changing, human-picked.
+// Public visibility requires BOTH publishStatus='published' and a human
+// having verified the price/URL, so a seeded row can never go live unread.
+model Certification {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug            String    @unique
+  title           String
+  provider        String
+  providerSlug    String    @map("provider_slug")
+  providerLogoUrl String?   @map("provider_logo_url")
+  summary         String?
+  description     String?
+  highlights      String[]  @default([])
+  category        String
+  tags            String[]  @default([])
+  level           String    @default("beginner")
+  priceType       String    @default("free") @map("price_type")
+  priceAmount     Decimal?  @map("price_amount")
+  priceCurrency   String?   @default("INR") @map("price_currency")
+  durationHours   Int?      @map("duration_hours")
+  // Always read via `affiliateUrl ?? url` — see partnerLink in
+  // src/lib/certificationQuery.ts. Never render `url` directly once an
+  // affiliate link exists, or the click earns nothing.
+  url             String
+  affiliateUrl    String?   @map("affiliate_url")
+  affiliateNetwork String?  @map("affiliate_network")
+  publishStatus   String    @default("draft") @map("publish_status")
+  publishedAt     DateTime? @map("published_at")
+  verifiedAt      DateTime? @map("verified_at")
+  verifiedBy      String?   @map("verified_by")
+  isFeatured      Boolean   @default(false) @map("is_featured")
+  displayOrder    Int       @default(100) @map("display_order")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @map("updated_at")
+
+  partnerClicks   PartnerClick[]
+
+  @@index([publishStatus, displayOrder, createdAt(sort: Desc)])
+  @@index([category])
+  @@index([priceType])
+  @@index([providerSlug])
+  @@index([tags], type: Gin)
+  @@index([verifiedAt])
+  @@map("certifications")
+}
+
+// Separate from ApplyClick on purpose: mixing monetised partner clicks into
+// the job/contest engagement numbers would quietly corrupt the admin
+// analytics dashboard. Also the evidence used when negotiating rates.
+model PartnerClick {
+  id               BigInt   @id @default(autoincrement())
+  visitorId        String   @map("visitor_id") @db.Uuid
+  sessionId        String   @map("session_id") @db.Uuid
+  certificationId  String   @map("certification_id") @db.Uuid
+  providerSlug     String   @map("provider_slug")
+  affiliateNetwork String?  @map("affiliate_network")
+  isMonetised      Boolean  @default(false) @map("is_monetised")
+  trafficSource    String   @default("direct") @map("traffic_source")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  certification    Certification @relation(fields: [certificationId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([certificationId, createdAt(sort: Desc)])
+  @@index([providerSlug, createdAt(sort: Desc)])
+  @@index([trafficSource, createdAt(sort: Desc)])
+  @@map("partner_click")
+}
