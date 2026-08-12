@@ -267,3 +267,58 @@ model PartnerClick {
   @@index([trafficSource, createdAt(sort: Desc)])
   @@map("partner_click")
 }
+
+// Student accounts (db/migrations/0033). Identity is in Firebase; this row is
+// everything else, joined by firebaseUid. No password is ever stored here.
+model User {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  firebaseUid   String    @unique @map("firebase_uid")
+  email         String    @unique
+  fullName      String?   @map("full_name")
+  phone         String?
+  city          String?
+  emailVerified Boolean   @default(false) @map("email_verified")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  lastLoginAt   DateTime? @map("last_login_at")
+
+  profile UserProfile?
+  skills  UserSkill[]
+
+  @@map("users")
+}
+
+// One row per user, created lazily on first save. Resume sections are jsonb —
+// repeatable, free-shaped, read as a whole (see the migration comment).
+model UserProfile {
+  userId        String   @id @map("user_id") @db.Uuid
+  headline      String?
+  summary       String?
+  links         Json     @default("{}")
+  education     Json     @default("[]")
+  experience    Json     @default("[]")
+  projects      Json     @default("[]")
+  achievements  Json     @default("[]")
+  schemaVersion Int      @default(1) @map("schema_version")
+  updatedAt     DateTime @default(now()) @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+// Join table (not jsonb) so profile skills share the canonical job-search
+// vocabulary — the basis for future user<->job matching.
+model UserSkill {
+  userId      String  @map("user_id") @db.Uuid
+  canonical   String
+  proficiency String?
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // No Skill relation here: apps/admin doesn't model the skills tables. The DB
+  // FK to skills(canonical) still exists (db/migrations/0033); admin just
+  // doesn't need to traverse it.
+
+  @@id([userId, canonical])
+  @@index([canonical])
+  @@map("user_skills")
+}

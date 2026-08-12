@@ -13,11 +13,13 @@ export function AppShell({
   footer,
   jobsCount,
   contestsCount,
+  isSignedIn = false,
 }: {
   children: ReactNode;
   footer: ReactNode;
   jobsCount?: number;
   contestsCount?: number;
+  isSignedIn?: boolean;
 }) {
   const pathname = usePathname();
   const hideSidebar = pathname === "/login";
@@ -62,13 +64,14 @@ export function AppShell({
           onDesktopExpandedChange={setDesktopExpanded}
           jobsCount={jobsCount}
           contestsCount={contestsCount}
+          isSignedIn={isSignedIn}
         />
       )}
       <div
         className={`main-content${!hideSidebar && desktopExpanded ? " main-content-expanded" : ""}`}
         style={hideSidebar ? { marginLeft: 0 } : undefined}
       >
-        <Navbar scrolled={scrolled} sidebarOpen={sidebarOpen} onOpenSidebar={() => setSidebarOpen((v) => !v)} />
+        <Navbar scrolled={scrolled} sidebarOpen={sidebarOpen} onOpenSidebar={() => setSidebarOpen((v) => !v)} isSignedIn={isSignedIn} />
         <div className="main-scroll-area" ref={scrollRef}>
           <div id="main-content">{children}</div>
           {footer}

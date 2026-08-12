@@ -5,6 +5,7 @@
 // it lived there. Shared constants used by both server and client code
 // need their own plain module.
 export const TABS = [
+  { key: "resume", label: "Profile / Resume" },
   { key: "saved", label: "Saved roles" },
   { key: "applications", label: "Applications" },
   { key: "contests", label: "Contests" },

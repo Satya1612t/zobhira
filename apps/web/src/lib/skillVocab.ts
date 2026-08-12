@@ -72,6 +72,47 @@ export async function expandSkillQuery(raw: string): Promise<string[]> {
 }
 
 /**
+ * Resolve a list of user-typed skill terms to canonical vocabulary entries.
+ * Used when saving a profile: known terms become user_skills rows (sharing the
+ * job-search vocabulary), unknown terms are returned so the caller can record
+ * them as misses rather than silently dropping them (build spec §5 / #5).
+ */
+export async function resolveCanonicalSkills(
+  terms: string[]
+): Promise<{ canonical: string[]; unknown: string[] }> {
+  const vocab = await getVocabulary();
+  const canonical = new Set<string>();
+  const unknown: string[] = [];
+  for (const term of terms) {
+    const t = term.trim();
+    if (!t) continue;
+    const c = vocab.aliasToCanonical.get(normalizeSkill(t));
+    if (c) canonical.add(c);
+    else unknown.push(t);
+  }
+  return { canonical: [...canonical], unknown };
+}
+
+/**
+ * Prefix/substring autocomplete over the active canonical vocabulary, for the
+ * profile skills input. Matches on the normalized form so "node js" finds
+ * "Node.js". Capped small — this feeds a dropdown, not a report.
+ */
+export async function suggestSkills(query: string, limit = 8): Promise<string[]> {
+  const norm = normalizeSkill(query);
+  if (!norm) return [];
+  const vocab = await getVocabulary();
+  const starts: string[] = [];
+  const contains: string[] = [];
+  for (const [normalized, canonical] of vocab.aliasToCanonical) {
+    if (normalized === norm) continue;
+    if (normalized.startsWith(norm)) starts.push(canonical);
+    else if (normalized.includes(norm)) contains.push(canonical);
+  }
+  return [...new Set([...starts, ...contains])].slice(0, limit);
+}
+
+/**
  * Records a skill term the user searched for that matched nothing.
  *
  * This is the highest-signal input the vocabulary miner has, but the two

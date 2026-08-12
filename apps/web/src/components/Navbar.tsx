@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
 import { Modal } from "@/components/ui/Modal";
-import { SHOW_UNRELEASED_NAV } from "@/lib/authNavFlags";
+import { SHOW_UNRELEASED_NAV, AUTH_ENABLED } from "@/lib/authNavFlags";
 
 const NAV_LINKS = [
   { label: "Jobs", href: "/jobs" },
@@ -33,10 +33,12 @@ export function Navbar({
   scrolled,
   onOpenSidebar,
   sidebarOpen,
+  isSignedIn = false,
 }: {
   scrolled: boolean;
   onOpenSidebar: () => void;
   sidebarOpen: boolean;
+  isSignedIn?: boolean;
 }) {
   const pathname = usePathname();
   const [searchOpen, setSearchOpen] = useState(false);
@@ -85,15 +87,21 @@ export function Navbar({
           <button type="button" className="navbar-icon-btn" aria-label="Search" onClick={() => setSearchOpen(true)}>
             <SearchIcon />
           </button>
-          {SHOW_UNRELEASED_NAV && (
-            <>
-              <Link href="/login" className="btn btn-ghost navbar-signin-desktop">
-                Log in
+          {AUTH_ENABLED && (
+            isSignedIn ? (
+              <Link href="/profile" className="btn btn-primary" style={{ borderRadius: "var(--radius-full)", boxShadow: "var(--shadow-accent)" }}>
+                Profile
               </Link>
-              <Link href="/login?tab=signup" className="btn btn-primary" style={{ borderRadius: "var(--radius-full)", boxShadow: "var(--shadow-accent)" }}>
-                Sign up
-              </Link>
-            </>
+            ) : (
+              <>
+                <Link href="/login" className="btn btn-ghost navbar-signin-desktop">
+                  Log in
+                </Link>
+                <Link href="/login?tab=signup" className="btn btn-primary" style={{ borderRadius: "var(--radius-full)", boxShadow: "var(--shadow-accent)" }}>
+                  Sign up
+                </Link>
+              </>
+            )
           )}
         </div>
       </header>

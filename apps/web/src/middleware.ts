@@ -19,6 +19,14 @@ const COOKIE_BASE = {
 // attribution once per session so a click three pages deep still credits the
 // source the visitor actually arrived from.
 export function middleware(request: NextRequest) {
+  // Cheap logged-out redirect for /profile — checks only that the zb_auth
+  // cookie is PRESENT. Real verification is getCurrentUser() in a Node
+  // runtime; firebase-admin can't load on the Edge (see apps/admin's
+  // middleware comment). Presence is not proof — the page still verifies.
+  if (request.nextUrl.pathname.startsWith("/profile") && !request.cookies.get("zb_auth")?.value) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
   const response = NextResponse.next();
 
   // Visitor — persistent.

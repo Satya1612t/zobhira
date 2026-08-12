@@ -1,8 +1,14 @@
 import type { ReactNode } from "react";
+import { cookies } from "next/headers";
 import { unstable_cache } from "next/cache";
 import { AppShell } from "@/components/AppShell";
 import { Footer } from "@/components/Footer";
 import { prisma } from "@/lib/prisma";
+
+// Literal (not imported from session.ts) so this layout doesn't pull
+// firebase-admin into its module graph — nav only needs cheap PRESENCE, not
+// verification. Real verification happens in the /profile page's getCurrentUser.
+const SESSION_COOKIE = "zb_auth";
 
 // force-dynamic here (not just the unstable_cache below) because there's no
 // database reachable during the Docker build stage — it's an isolated build
@@ -30,9 +36,10 @@ const getSidebarCounts = unstable_cache(
 
 export default async function MainLayout({ children }: { children: ReactNode }) {
   const { jobsCount, contestsCount } = await getSidebarCounts();
+  const isSignedIn = Boolean(cookies().get(SESSION_COOKIE)?.value);
 
   return (
-    <AppShell footer={<Footer />} jobsCount={jobsCount} contestsCount={contestsCount}>
+    <AppShell footer={<Footer />} jobsCount={jobsCount} contestsCount={contestsCount} isSignedIn={isSignedIn}>
       {children}
     </AppShell>
   );

@@ -76,6 +76,7 @@ export function Sidebar({
   onDesktopExpandedChange,
   jobsCount,
   contestsCount,
+  isSignedIn = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -83,6 +84,7 @@ export function Sidebar({
   onDesktopExpandedChange: (expanded: boolean) => void;
   jobsCount?: number;
   contestsCount?: number;
+  isSignedIn?: boolean;
 }) {
   const pathname = usePathname();
   // Mobile's off-canvas drawer is always full-width/labeled regardless of
@@ -188,7 +190,7 @@ export function Sidebar({
         </nav>
 
         <div className="sidebar-bottom">
-          {SHOW_UNRELEASED_NAV && (
+          {isSignedIn && (
             <div className="sidebar-item-wrap">
               <Link
                 href="/profile"
