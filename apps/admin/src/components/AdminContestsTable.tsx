@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { adminFetch } from "@/lib/adminFetch";
 import { useToast } from "@/components/Toast";
 
@@ -144,9 +145,12 @@ export function AdminContestsTable() {
             }}
           >
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <Link
+                href={`/contests/${contest.id}`}
+                style={{ fontWeight: 600, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", textDecoration: "none" }}
+              >
                 {contest.title}
-              </div>
+              </Link>
               <div style={{ color: "var(--ink-muted)", fontSize: 12 }}>
                 {contest.organizer ?? "—"} · {contest.platform}
               </div>

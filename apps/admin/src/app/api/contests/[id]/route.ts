@@ -3,6 +3,24 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/firebase-admin";
 import { writeAuditLog } from "@/lib/auditLog";
 
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const admin = await requireAdmin(request);
+  if (admin instanceof Response) return admin;
+
+  const contest = await prisma.contest.findUnique({ where: { id: params.id } });
+  if (!contest) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // prizeAmount is a Postgres NUMERIC -> Prisma Decimal, which JSON.stringify
+  // (and therefore NextResponse.json) can't serialize natively — it would
+  // come out as {}. Cast to a plain number for the response only.
+  return NextResponse.json({
+    ...contest,
+    prizeAmount: contest.prizeAmount === null ? null : Number(contest.prizeAmount),
+  });
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
