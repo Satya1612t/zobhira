@@ -76,7 +76,7 @@ export default async function ProfilePage({ searchParams }: { searchParams?: { t
             (build spec §2.3) — honest empty states, never invented rows. */}
         {tab === "saved" && <EmptyState text="You haven't saved any roles yet." cta={{ href: "/jobs", label: "Browse roles" }} />}
         {tab === "applications" && <EmptyState text="Application tracking is coming soon." />}
-        {tab === "contests" && <EmptyState text="You haven't entered any contests yet." cta={{ href: "/certifications", label: "Explore certifications" }} />}
+        {tab === "contests" && <EmptyState text="You haven't entered any contests yet." cta={{ href: "/jobs", label: "Browse roles" }} />}
         {tab === "alerts" && <EmptyState text="Job alerts are coming soon." />}
 
         {tab === "settings" && (

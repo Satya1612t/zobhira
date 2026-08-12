@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { motion } from "motion/react";
-import { SHOW_UNRELEASED_NAV } from "@/lib/authNavFlags";
+import { SHOW_UNRELEASED_NAV, SHOW_CERTIFICATIONS } from "@/lib/authNavFlags";
 
 function HomeIcon() {
   return (
@@ -62,7 +62,9 @@ function ProfileIcon() {
 const TABS = [
   { label: "Home", href: "/", Icon: HomeIcon },
   { label: "Jobs", href: "/jobs", Icon: JobsIcon, countKey: "jobsCount" as const },
-  { label: "Certifications", href: "/certifications", Icon: CertificationsIcon },
+  ...(SHOW_CERTIFICATIONS
+    ? [{ label: "Certifications", href: "/certifications", Icon: CertificationsIcon }]
+    : []),
   ...(SHOW_UNRELEASED_NAV
     ? [{ label: "Contests", href: "/contest", Icon: ContestsIcon, countKey: "contestsCount" as const }]
     : []),

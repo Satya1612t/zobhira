@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { CERTIFICATION_SELECT, mapCertification } from "@/lib/certificationQuery";
 import { CertificationDetailActions } from "@/components/CertificationDetailActions";
 import { CompanyLogo } from "@/components/CompanyLogo";
+import { SHOW_CERTIFICATIONS } from "@/lib/authNavFlags";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,7 @@ async function getCert(slug: string) {
 }
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+  if (!SHOW_CERTIFICATIONS) return { title: "Certification not found" };
   const cert = await getCert(params.slug);
   if (!cert) return { title: "Certification not found" };
   return {
@@ -35,6 +37,9 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 }
 
 export default async function CertificationDetailPage({ params }: { params: { slug: string } }) {
+  // Gated off production until certifications ship — see authNavFlags.ts.
+  if (!SHOW_CERTIFICATIONS) notFound();
+
   const cert = await getCert(params.slug);
   if (!cert) notFound();
 

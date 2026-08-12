@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { prisma } from "@/lib/prisma";
 import { allListingSlugs, MIN_LISTINGS_TO_INDEX } from "@/lib/designationCities";
-import { SHOW_UNRELEASED_NAV } from "@/lib/authNavFlags";
+import { SHOW_UNRELEASED_NAV, SHOW_CERTIFICATIONS } from "@/lib/authNavFlags";
 
 const BASE_URL = "https://zobhira.com";
 
@@ -25,7 +25,7 @@ const STATIC_ROUTES: Array<{
   { path: "/jobs", priority: 0.9, changeFrequency: "hourly" },
   ...(SHOW_UNRELEASED_NAV ? [{ path: "/contest", priority: 0.9, changeFrequency: "hourly" as const }] : []),
   { path: "/today", priority: 0.8, changeFrequency: "hourly" },
-  { path: "/certifications", priority: 0.8, changeFrequency: "weekly" },
+  ...(SHOW_CERTIFICATIONS ? [{ path: "/certifications", priority: 0.8, changeFrequency: "weekly" as const }] : []),
   { path: "/about", priority: 0.5, changeFrequency: "monthly" },
   { path: "/contact", priority: 0.4, changeFrequency: "yearly" },
   { path: "/privacy", priority: 0.3, changeFrequency: "yearly" },
@@ -46,11 +46,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       : Promise.resolve([]),
     prisma.job.findMany({ where: VISIBLE_JOB, select: { tags: true, location: true } }),
     // Published only — a draft slug in the sitemap causes the same soft-404
-    // penalty the stub-job comment above warns about.
-    prisma.certification.findMany({
-      where: { publishStatus: "published" },
-      select: { slug: true, updatedAt: true },
-    }),
+    // penalty the stub-job comment above warns about. Gated off production
+    // with the pages themselves (see authNavFlags.ts).
+    SHOW_CERTIFICATIONS
+      ? prisma.certification.findMany({
+          where: { publishStatus: "published" },
+          select: { slug: true, updatedAt: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   // One in-memory pass over every active job rather than 58 x 12 separate

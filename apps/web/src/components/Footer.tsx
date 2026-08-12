@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { unstable_cache } from "next/cache";
 import { getTopLocations } from "@/lib/jobQuery";
-import { SHOW_UNRELEASED_NAV } from "@/lib/authNavFlags";
+import { SHOW_UNRELEASED_NAV, SHOW_CERTIFICATIONS } from "@/lib/authNavFlags";
 
 // Cached (5 min) rather than a live per-request fetch — Footer renders on
 // every page via the shared (main) layout, so an uncached Prisma call here
@@ -62,7 +62,7 @@ const FIND_WORK = [
   { label: "All jobs", href: "/jobs" },
   { label: "Fresher roles", href: "/jobs?experienceLevel=fresher" },
   { label: "Remote roles", href: "/jobs?workplaceType=remote" },
-  { label: "Certifications", href: "/certifications" },
+  ...(SHOW_CERTIFICATIONS ? [{ label: "Certifications", href: "/certifications" }] : []),
 ];
 
 const COMPETE = [

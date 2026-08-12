@@ -5,11 +5,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
 import { Modal } from "@/components/ui/Modal";
-import { SHOW_UNRELEASED_NAV, AUTH_ENABLED } from "@/lib/authNavFlags";
+import { SHOW_UNRELEASED_NAV, SHOW_CERTIFICATIONS, AUTH_ENABLED } from "@/lib/authNavFlags";
 
 const NAV_LINKS = [
   { label: "Jobs", href: "/jobs" },
-  { label: "Certifications", href: "/certifications" },
+  ...(SHOW_CERTIFICATIONS ? [{ label: "Certifications", href: "/certifications" }] : []),
   ...(SHOW_UNRELEASED_NAV ? [{ label: "Contests", href: "/contest" }] : []),
   { label: "Today", href: "/today" },
   { label: "About", href: "/about" },

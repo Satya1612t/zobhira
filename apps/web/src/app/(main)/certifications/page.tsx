@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { SHOW_CERTIFICATIONS } from "@/lib/authNavFlags";
 import { CertificationFeed } from "@/components/CertificationFeed";
 import {
   buildCertificationsWhere,
@@ -82,6 +84,11 @@ function FilterRow({
 }
 
 export default async function CertificationsPage({ searchParams }: { searchParams: CertificationSearchParams }) {
+  // Certifications aren't ready for production yet — same gate as the nav
+  // links that point here (Navbar/Sidebar/Footer) and the sitemap. See
+  // authNavFlags.ts.
+  if (!SHOW_CERTIFICATIONS) notFound();
+
   const { priceType, category, level } = searchParams;
   const where = buildCertificationsWhere({ priceType, category, level });
 
