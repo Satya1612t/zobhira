@@ -19,6 +19,9 @@ const ADMIN_JOB_SELECT = {
   isActive: true,
   postedAt: true,
   deadlineAt: true,
+  // The apply link — what the public detail page's Apply button points at
+  // (apps/web JobDetailActions uses job.sourceUrl). Editable from the table.
+  sourceUrl: true,
 } satisfies Prisma.JobSelect;
 
 export async function GET(request: NextRequest) {

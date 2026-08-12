@@ -5,6 +5,7 @@ type AuditAction =
   | "job.delete"
   | "job.set_active"
   | "job.clear_all"
+  | "job.update_apply_url"
   | "contest.delete"
   | "contest.set_active"
   | "contest.clear_all"

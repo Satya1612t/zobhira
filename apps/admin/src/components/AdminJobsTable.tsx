@@ -14,6 +14,7 @@ type AdminJob = {
   isActive: boolean;
   postedAt: string | null;
   deadlineAt: string | null;
+  sourceUrl: string;
 };
 
 // Current ingestion sources (LinkedIn/Talentd/YCombinator retired). Value is
@@ -43,6 +44,11 @@ export function AdminJobsTable() {
   const [isActive, setIsActive] = useState("");
   const [formatted, setFormatted] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Apply-link edit dialog state.
+  const [editing, setEditing] = useState<AdminJob | null>(null);
+  const [newUrl, setNewUrl] = useState("");
+  const [savingUrl, setSavingUrl] = useState(false);
 
   // Free-text search is debounced (typing "software engineer" would
   // otherwise fire 18 requests); source/status are instant since they're
@@ -115,6 +121,37 @@ export function AdminJobsTable() {
       showToast(`Deleted "${job.title}".`, "success");
     } catch {
       showToast(`Couldn't delete "${job.title}". Refresh and try again.`, "error");
+    }
+  }
+
+  function openApplyLinkEditor(job: AdminJob) {
+    setEditing(job);
+    setNewUrl(job.sourceUrl);
+  }
+
+  async function saveApplyLink() {
+    if (!editing) return;
+    const url = newUrl.trim();
+    if (url === editing.sourceUrl) { setEditing(null); return; }
+    let valid = false;
+    try { const u = new URL(url); valid = u.protocol === "http:" || u.protocol === "https:"; } catch { valid = false; }
+    if (!valid) { showToast("Enter a valid http(s) URL.", "error"); return; }
+
+    setSavingUrl(true);
+    try {
+      const res = await adminFetch(`/api/jobs/${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceUrl: url }),
+      });
+      if (!res.ok) throw new Error();
+      setJobs((prev) => prev.map((j) => (j.id === editing.id ? { ...j, sourceUrl: url } : j)));
+      showToast(`Apply link updated for "${editing.title}".`, "success");
+      setEditing(null);
+    } catch {
+      showToast("Couldn't update the apply link. Try again.", "error");
+    } finally {
+      setSavingUrl(false);
     }
   }
 
@@ -276,6 +313,23 @@ export function AdminJobsTable() {
               </div>
             </div>
             <button
+              onClick={() => openApplyLinkEditor(job)}
+              title="Edit the apply link"
+              style={{
+                padding: "5px 10px",
+                borderRadius: "var(--radius-sm)",
+                border: "1px solid var(--line)",
+                background: "var(--surface)",
+                color: "var(--ink)",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
+            >
+              Apply link
+            </button>
+            <button
               onClick={() => toggleActive(job)}
               style={{
                 padding: "5px 10px",
@@ -333,6 +387,58 @@ export function AdminJobsTable() {
           >
             Next →
           </button>
+        </div>
+      )}
+
+      {editing && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Edit apply link"
+          onClick={() => !savingUrl && setEditing(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.45)", display: "grid", placeItems: "center", padding: 16 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 520, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: 20, boxShadow: "var(--shadow-card)" }}
+          >
+            <h3 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 700, color: "var(--ink)" }}>Edit apply link</h3>
+            <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--ink-muted)" }}>
+              This is where the public <strong>Apply</strong> button sends candidates for “{editing.title}”.
+            </p>
+
+            <div style={{ marginBottom: 10 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--ink-faint)", textTransform: "uppercase", letterSpacing: 0.4 }}>Current</span>
+              <div style={{ fontSize: 12.5, color: "var(--ink-muted)", wordBreak: "break-all", marginTop: 2 }}>{editing.sourceUrl}</div>
+            </div>
+
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--ink-muted)", marginBottom: 4 }}>New apply link</label>
+            <input
+              autoFocus
+              value={newUrl}
+              onChange={(e) => setNewUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") saveApplyLink(); }}
+              placeholder="https://…"
+              style={{ width: "100%", padding: "9px 11px", borderRadius: "var(--radius-sm)", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontSize: 13.5 }}
+            />
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
+              <button
+                onClick={() => setEditing(null)}
+                disabled={savingUrl}
+                style={{ padding: "8px 16px", borderRadius: "var(--radius-sm)", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveApplyLink}
+                disabled={savingUrl}
+                style={{ padding: "8px 16px", borderRadius: "var(--radius-sm)", border: "1px solid var(--accent)", background: "var(--accent)", color: "var(--accent-ink)", fontSize: 13, fontWeight: 600, cursor: savingUrl ? "not-allowed" : "pointer" }}
+              >
+                {savingUrl ? "Saving…" : "Confirm & save"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
