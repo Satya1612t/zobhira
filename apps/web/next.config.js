@@ -15,6 +15,19 @@ const nextConfig = {
   async redirects() {
     return [{ source: "/live", destination: "/today", permanent: true }];
   },
+  // Google sign-in on /login uses Firebase signInWithPopup, which needs the
+  // popup to hand the token back to the opener. The default COOP
+  // (same-origin) blocks window.closed across the popup boundary and the
+  // sign-in silently fails — same fix apps/admin's next.config.js already
+  // carries. Scoped to /login so the rest of the site keeps the stricter COOP.
+  async headers() {
+    return [
+      {
+        source: "/login",
+        headers: [{ key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" }],
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;
