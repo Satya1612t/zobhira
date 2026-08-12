@@ -63,7 +63,18 @@ services:
       retries: 3
 
   web:
-    build: ./apps/web
+    build:
+      context: ./apps/web
+      # NEXT_PUBLIC_* are inlined into the client bundle at build time — they
+      # must be build args, not just runtime `environment:` below.
+      args:
+        NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY}
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}
+        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
+        NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID}
+        NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: ${NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -73,6 +84,11 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/job_portal
       SCRAPER_API_URL: http://scraper:8000
+      # Student accounts: the web app verifies session cookies / ID tokens with
+      # the Firebase Admin SDK (same project as apps/admin).
+      FIREBASE_ADMIN_PROJECT_ID: ${FIREBASE_ADMIN_PROJECT_ID}
+      FIREBASE_ADMIN_CLIENT_EMAIL: ${FIREBASE_ADMIN_CLIENT_EMAIL}
+      FIREBASE_ADMIN_PRIVATE_KEY: ${FIREBASE_ADMIN_PRIVATE_KEY}
       # Shared secret the n8n dispatch workflows send as X-Dispatch-Key to the
       # /api/dispatch/* endpoints (service-to-service, over the compose
       # network at http://web:3000 — never exposed publicly). See
